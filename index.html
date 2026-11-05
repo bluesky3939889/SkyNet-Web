@@ -8,8 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://api.github.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="theme-color" content="#101820">
   <title>SkyNet 即時偵測看板</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="board.js" defer></script>
+  <link rel="stylesheet" href="style.css?v=20261105-remember">
+  <script src="board.js?v=20261105-remember" defer></script>
 </head>
 <body>
 <main>
@@ -26,7 +26,9 @@
       <input id="repo" placeholder="帳號/私人儲存庫名稱" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="160">
       <label for="token">查看用 Token</label>
       <input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="token-help">
-      <p id="token-help" class="hint">請使用僅授權此儲存庫、Contents 唯讀的 Token。憑證只在此頁開啟期間使用，重新整理後需再次輸入。</p>
+      <p id="token-help" class="hint">請使用僅授權此私人儲存庫、Contents 唯讀的 Token。</p>
+      <label class="remember" for="remember"><input id="remember" type="checkbox"><span>在此裝置記住登入 30 天</span></label>
+      <p class="hint">勾選後會將 Token 保存在此瀏覽器，開啟看板時自動連線。請在自己的裝置上使用。</p>
       <button id="connect">連線看板</button>
     </form>
   </section>
@@ -38,6 +40,7 @@
     <p id="empty" class="card" hidden>尚無偵測紀錄。請保持 Client 側錄並啟用人員偵測。</p>
     <ol id="events"></ol>
   </section>
+  <button id="forget" class="secondary" hidden>清除此裝置登入</button>
   <footer>最近 100 筆 · 事件時間為台北時間 · 手機鎖屏或切到背景時暫停更新</footer>
 </main>
 </body>
