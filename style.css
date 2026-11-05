@@ -18,6 +18,8 @@ form{display:grid;gap:.65rem;margin:1rem 0 0}
 label{font-weight:600}
 input,button{font:inherit;border:1px solid #4e727e;border-radius:.45rem;padding:.75rem;min-height:44px}
 input{width:100%;background:#101820;color:inherit}
+.remember{display:flex;align-items:center;gap:.65rem;min-height:44px;font-size:.95rem}
+.remember input{width:20px;height:20px;min-height:0;margin:0;accent-color:#68e1d1;flex:none}
 button{background:#20534f;color:#f2fffd;cursor:pointer;font-weight:600}
 button.secondary{background:#192731;font-size:.9rem;white-space:nowrap}
 button:disabled{opacity:.55;cursor:wait}
