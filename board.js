@@ -4,6 +4,8 @@ const element = id => document.getElementById(id);
 const clock = new Intl.DateTimeFormat("zh-TW", {timeZone: "Asia/Taipei", timeStyle: "medium"});
 const repositoryPattern = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9_.-]+$/;
 const header = "# SkyNet 人員偵測紀錄\n\n最近 100 筆，時間為台北時間。\n\n";
+const loginKey = "skynet-viewer-login";
+const rememberDuration = 30 * 24 * 60 * 60 * 1000;
 let session = null;
 let timer;
 let controller;
@@ -82,7 +84,7 @@ function render(rows) {
   element("latest").textContent = rows.length ? "最新事件時間　" + rows[0].time : "";
 }
 
-function signOut(message = "已登出，請重新連線。", error = false) {
+function signOut(message = "已登出，已清除記住的登入。", error = false, forget = true) {
   session = null;
   clearTimeout(timer);
   controller?.abort();
@@ -91,19 +93,32 @@ function signOut(message = "已登出，請重新連線。", error = false) {
   element("checked").textContent = element("latest").textContent = "";
   element("feed").hidden = element("logout").hidden = true;
   element("auth").hidden = false;
+  if (forget) {
+    try {
+      localStorage.removeItem(loginKey);
+      element("forget").hidden = true;
+    } catch {
+      message += " 此瀏覽器無法清除登入資料，請至瀏覽器設定清除此網站的資料。";
+    }
+    element("remember").checked = false;
+  }
   status(message, error);
 }
 
 async function refresh() {
   clearTimeout(timer);
   const current = session;
-  if (!current || busy || document.hidden) return;
+  if (!current || document.hidden) return;
+  if (busy) {
+    timer = setTimeout(refresh, 100);
+    return;
+  }
   if (Date.now() < resumeAt) {
     timer = setTimeout(refresh, resumeAt - Date.now());
     return;
   }
   busy = true;
-  element("refresh").disabled = element("connect").disabled = true;
+  element("refresh").disabled = element("connect").disabled = element("remember").disabled = true;
   try {
     if (!current.verified) {
       const metadata = await request(current, "");
@@ -130,10 +145,23 @@ async function refresh() {
       rows = parseFeed(new TextDecoder("utf-8", {fatal: true}).decode(bytes));
     }
     render(rows);
+    if (current.remember && !current.saved) {
+      try {
+        localStorage.setItem(loginKey, JSON.stringify({repo: current.repo, token: current.token,
+          expiresAt: Date.now() + rememberDuration}));
+        current.saved = true;
+        current.storageError = false;
+        element("forget").hidden = false;
+      } catch {
+        current.remember = false;
+        current.storageError = true;
+      }
+    }
     element("auth").hidden = true;
     element("feed").hidden = element("logout").hidden = false;
     element("checked").textContent = "最近成功查詢　" + clock.format(new Date());
-    status(saved ? "已連線 · 每 10 秒自動更新" : "已連線 · 等待 Client 首次上傳");
+    const message = saved ? "已連線 · 每 10 秒自動更新" : "已連線 · 等待 Client 首次上傳";
+    status(current.storageError ? message + "。此瀏覽器無法記住登入。" : message, Boolean(current.storageError));
   } catch (error) {
     if (session !== current) return;
     if ([401, 403, 404].includes(error.status)) {
@@ -147,7 +175,7 @@ async function refresh() {
     }
   } finally {
     busy = false;
-    element("refresh").disabled = element("connect").disabled = false;
+    element("refresh").disabled = element("connect").disabled = element("remember").disabled = false;
     if (session === current && !document.hidden) timer = setTimeout(refresh, Math.max(10000, resumeAt - Date.now()));
   }
 }
@@ -161,18 +189,59 @@ element("connect-form").addEventListener("submit", event => {
     status("請填入帳號/私人儲存庫名稱及有效的查看用 Token。", true);
     return;
   }
-  session = {repo, token, verified: false};
+  session = {repo, token, verified: false, remember: element("remember").checked, saved: false};
   element("token").value = "";
-  try { localStorage.setItem("skynet-viewer-repo", repo); } catch {}
+  try {
+    localStorage.removeItem(loginKey);
+    element("forget").hidden = true;
+    localStorage.setItem("skynet-viewer-repo", repo);
+  } catch {
+    session.storageError = true;
+  }
   status("正在驗證並讀取偵測紀錄…");
   refresh();
 });
 element("logout").addEventListener("click", () => signOut());
+element("forget").addEventListener("click", () => {
+  signOut("已清除此裝置登入，請重新連線。");
+});
 element("refresh").addEventListener("click", refresh);
 document.addEventListener("visibilitychange", () => {
   clearTimeout(timer);
   if (document.hidden) controller?.abort();
   else refresh();
 });
-window.addEventListener("pagehide", () => signOut("請重新連線。"));
+window.addEventListener("pagehide", () => signOut("請重新連線。", false, false));
+window.addEventListener("pageshow", event => {
+  if (event.persisted) restoreLogin();
+});
+window.addEventListener("storage", event => {
+  if ((event.key === loginKey || event.key === null) && session) {
+    signOut("此瀏覽器的登入記憶已變更，請重新連線。", false, false);
+    element("forget").hidden = event.newValue === null;
+  }
+});
+
+function restoreLogin() {
+  try {
+    const raw = localStorage.getItem(loginKey);
+    if (!raw) return;
+    element("forget").hidden = false;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved.repo !== "string" || !repositoryPattern.test(saved.repo) || typeof saved.token !== "string" ||
+        !saved.token || /\s/.test(saved.token) || !Number.isFinite(saved.expiresAt) || saved.expiresAt <= Date.now()) {
+      signOut("記住的登入已到期或無法讀取，請重新連線。");
+      return;
+    }
+    element("repo").value = saved.repo;
+    element("remember").checked = true;
+    session = {repo: saved.repo, token: saved.token, verified: false, saved: true};
+    status("正在使用此裝置記住的登入連線…");
+    refresh();
+  } catch {
+    signOut("無法讀取記住的登入，請重新連線。");
+  }
+}
+
 try { element("repo").value = localStorage.getItem("skynet-viewer-repo") || ""; } catch {}
+restoreLogin();
