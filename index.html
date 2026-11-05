@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- SKYNET_GITHUB_VIEWER -->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://api.github.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="theme-color" content="#101820">
+  <title>SkyNet 即時偵測看板</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="board.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <span class="mark" aria-hidden="true">◎</span>
+    <div><small>SKYNET / PRIVATE BOARD</small><h1>人員偵測看板</h1></div>
+    <button id="logout" class="secondary" hidden>登出</button>
+  </header>
+  <p id="status" role="status" aria-live="polite">請連線到你的私人偵測紀錄。</p>
+  <section id="auth" class="card">
+    <h2>連線私人看板</h2>
+    <form id="connect-form">
+      <label for="repo">偵測資料儲存庫</label>
+      <input id="repo" placeholder="帳號/私人儲存庫名稱" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="160">
+      <label for="token">查看用 Token</label>
+      <input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="token-help">
+      <p id="token-help" class="hint">請使用僅授權此儲存庫、Contents 唯讀的 Token。憑證只在此頁開啟期間使用，重新整理後需再次輸入。</p>
+      <button id="connect">連線看板</button>
+    </form>
+  </section>
+  <section id="feed" hidden aria-label="偵測紀錄">
+    <div class="toolbar"><h2>最近事件 <span id="count">0</span></h2><button id="refresh" class="secondary">立即更新</button></div>
+    <p class="hint">開啟此頁時每 10 秒查詢一次。Client 每批約等候 30 秒後上傳，網路與重試會增加延遲。</p>
+    <p id="checked" class="hint"></p>
+    <p id="latest" class="hint"></p>
+    <p id="empty" class="card" hidden>尚無偵測紀錄。請保持 Client 側錄並啟用人員偵測。</p>
+    <ol id="events"></ol>
+  </section>
+  <footer>最近 100 筆 · 事件時間為台北時間 · 手機鎖屏或切到背景時暫停更新</footer>
+</main>
+</body>
+</html>
