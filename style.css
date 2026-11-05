@@ -1,0 +1,36 @@
+/* SKYNET_GITHUB_VIEWER */
+:root{color-scheme:dark;font:16px system-ui,-apple-system,"Segoe UI",sans-serif;background:#101820;color:#ecf4f6}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+main{max-width:46rem;margin:auto;padding:clamp(1rem,4vw,2.5rem)}
+header{display:flex;gap:.85rem;align-items:center;border-bottom:1px solid #314550;padding-bottom:1.2rem}
+header button{margin-left:auto}
+.mark{font-size:2.5rem;color:#68e1d1}
+small,.hint,footer{color:#a5bdc9}
+header small{font-size:.68rem;letter-spacing:.12em}
+h1{margin:.3rem 0;font-size:clamp(1.35rem,5vw,1.9rem)}
+h2{font-size:1.1rem;margin:.5rem 0}
+#status{padding:.9rem 0;color:#84e8d0;line-height:1.65;overflow-wrap:anywhere}
+#status[data-error="true"]{color:#ffbf9e}
+.card,li{background:#192731;border:1px solid #314550;border-radius:.8rem;padding:1.1rem}
+form{display:grid;gap:.65rem;margin:1rem 0 0}
+label{font-weight:600}
+input,button{font:inherit;border:1px solid #4e727e;border-radius:.45rem;padding:.75rem;min-height:44px}
+input{width:100%;background:#101820;color:inherit}
+button{background:#20534f;color:#f2fffd;cursor:pointer;font-weight:600}
+button.secondary{background:#192731;font-size:.9rem;white-space:nowrap}
+button:disabled{opacity:.55;cursor:wait}
+button:hover:enabled{border-color:#84e8d0}
+:focus-visible{outline:2px solid #84e8d0;outline-offset:3px}
+.hint,footer{font-size:.84rem;line-height:1.65;margin:.25rem 0 1rem}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+#count{font-size:.8rem;color:#a5bdc9;margin-left:.3rem}
+ol{list-style:none;padding:0;display:grid;gap:.6rem}
+li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem}
+li strong{overflow-wrap:anywhere;font-size:1.1rem}
+li small{grid-column:1/-1;line-height:1.6;overflow-wrap:anywhere}
+.enter,.leave{align-self:start;border-radius:.35rem;padding:.15rem .5rem;font-size:.82rem}
+.enter{background:#19483e;color:#84e8d0}
+.leave{background:#233d4a;color:#bdd9ea}
+footer{border-top:1px solid #314550;padding-top:1rem;margin-top:1.5rem}
