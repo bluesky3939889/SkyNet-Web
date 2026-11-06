@@ -109,18 +109,30 @@ async function refresh() {
   }
 }
 $("login-form").addEventListener("submit",async event=>{
-  event.preventDefault();const nonce=++generation;$("login").disabled=true;
+  event.preventDefault();
+  if ($("login").disabled) return;
+  let project;
+  try {project=validateProject($("url").value,$("key").value);}
+  catch(error) {$("project-settings").open=true;status(error.message,true);return;}
+  const email=$("email").value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {status("請輸入完整 Email，例如 name@example.com；不能只填帳號名稱。",true);return;}
+  if (!$("password").value) {status("請輸入看板帳號的密碼。",true);return;}
+  const nonce=++generation;$("login").disabled=true;$("login").textContent="正在登入…";
+  status("正在連線 Supabase 驗證帳號，最長約 12 秒…");
   try {
-    const project=validateProject($("url").value,$("key").value);
-    const result=await api(project,"/auth/v1/token?grant_type=password",{email:$("email").value.trim(),password:$("password").value});
+    const result=await api(project,"/auth/v1/token?grant_type=password",{email,password:$("password").value});
     if (nonce!==generation) return;
     if (!result.user?.id||!result.refresh_token||!result.access_token) throw new Error("invalid_session");
     resetView();active={...project,owner:result.user.id,refresh:result.refresh_token,access:result.access_token,
       expires:Date.now()+Number(result.expires_in||3600)*1000,remember:$("remember").checked};
     persist(active);try {localStorage.setItem(configKey,JSON.stringify(project));} catch {}
     $("password").value="";showFeed();status("登入成功，正在讀取紀錄…");await refresh();
-  } catch(error) {if (nonce===generation) status(error.status?"登入失敗，請核對專案與帳號密碼。":error.message==="Failed to fetch"?"無法連線，請確認網路與專案是否啟用。":error.message,true);}
-  finally {$("login").disabled=false;}
+  } catch(error) {
+    if (nonce===generation) status(error.status?`登入失敗（HTTP ${error.status}），請核對專案與看板帳號密碼，並確認使用者已確認 Email。`:
+      error.name==="AbortError"?"登入連線超過 12 秒，請確認網路與 Supabase 專案是否已啟用。":
+      error.message==="Failed to fetch"?"無法連線，請確認網路、Project URL 與專案是否啟用。":"登入未完成，請重新整理後再試。",true);
+  }
+  finally {$("login").disabled=false;$("login").textContent="登入看板";}
 });
 $("logout").addEventListener("click",()=>{const old=endSession();if(old?.access) api(old,"/auth/v1/logout",{},old.access).catch(()=>{});});
 $("refresh").addEventListener("click",refresh);$("device").addEventListener("change",render);$("search").addEventListener("input",render);
@@ -128,6 +140,7 @@ document.addEventListener("visibilitychange",()=>{clearTimeout(timer);if(!docume
 window.addEventListener("pagehide",()=>clearTimeout(timer));
 window.addEventListener("pageshow",()=>{if(active&&!document.hidden)refresh();});
 (function restore(){
+  status("登入程式已就緒，請輸入看板 Email 與密碼。");
   let project=window.SKYNET_PUBLIC_CONFIG||{};
   try {if(!project.url) project=JSON.parse(localStorage.getItem(configKey)||"{}");} catch {}
   $("url").value=project.url||"";$("key").value=project.key||"";
