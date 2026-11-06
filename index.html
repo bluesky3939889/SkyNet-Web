@@ -4,18 +4,19 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="theme-color" content="#101820"><title>SkyNet · Supabase 偵測看板</title>
-<link rel="stylesheet" href="style.css"><script src="config.js" defer></script><script src="board.js" defer></script>
+<link rel="stylesheet" href="style.css?v=20261106-login2"><script src="config.js?v=20261106-login2" defer></script><script src="board.js?v=20261106-login2" defer></script>
 </head><body><main>
 <header><span class="mark" aria-hidden="true">◎</span><div><small>SKYNET / PRIVATE LIVE BOARD</small><h1>人員偵測看板</h1></div><button id="logout" class="secondary" hidden>登出</button></header>
-<p id="status" role="status" aria-live="polite">登入後查看你的偵測紀錄。</p>
+<p id="status" role="status" aria-live="polite">正在載入登入程式；若長時間停留，請重新整理網頁。</p>
+<noscript>此看板需要 JavaScript，請使用已啟用 JavaScript 的瀏覽器。</noscript>
 <section id="auth" class="card"><h2>登入私人看板</h2>
-<form id="login-form"><details id="project-settings"><summary>連線設定</summary>
+<form id="login-form" novalidate><details id="project-settings"><summary>連線設定</summary>
 <label for="url">Supabase Project URL</label><input id="url" type="url" placeholder="https://專案代碼.supabase.co" autocomplete="off" required>
 <label for="key">Publishable／anon key</label><input id="key" autocomplete="off" autocapitalize="none" spellcheck="false" required></details>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
 <label for="password">密碼</label><input id="password" type="password" autocomplete="current-password" required>
 <label class="remember" for="remember"><input id="remember" type="checkbox"><span>在此裝置保持登入</span></label>
-<p class="hint">使用管理者建立的帳號。每個帳號只能查看自己的紀錄。</p><button id="login">登入看板</button></form></section>
+<p class="hint">使用管理者建立的完整 Email 與密碼。每個帳號只能查看自己的紀錄。</p><button id="login" type="submit">登入看板</button></form></section>
 <section id="feed" hidden><div class="toolbar"><h2>最近事件 <span id="count">0</span></h2><button id="refresh" class="secondary">立即更新</button></div>
 <div class="filters"><label for="device">裝置</label><select id="device"><option value="">全部裝置</option></select><label for="search">搜尋角色</label><input id="search" placeholder="輸入角色名稱"></div>
 <p class="hint">每 5 秒更新，背景暫停。顯示最近 100 筆，時間為台北時間。</p><p id="checked" class="hint"></p><p id="empty" class="card" hidden>尚無紀錄。請保持 Client 側錄並啟用人員偵測。</p><ol id="events"></ol></section>
