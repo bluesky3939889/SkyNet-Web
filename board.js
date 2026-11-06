@@ -144,6 +144,10 @@ window.addEventListener("pageshow",()=>{if(active&&!document.hidden)refresh();})
   let project=window.SKYNET_PUBLIC_CONFIG||{};
   try {if(!project.url) project=JSON.parse(localStorage.getItem(configKey)||"{}");} catch {}
   $("url").value=project.url||"";$("key").value=project.key||"";
+  // Official builds carry only public endpoint data.  Normal users therefore
+  // see an account-only form; the details remain available for a local legacy
+  // deployment that has no embedded project configuration.
+  $("project-settings").hidden=Boolean(project.url&&project.key);
   $("project-settings").open=!project.url;
   try {
     const saved=JSON.parse(sessionStorage.getItem(storageKey)||localStorage.getItem(storageKey)||"null");
