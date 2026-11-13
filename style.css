@@ -24,3 +24,11 @@ main:has(#radar-feed:not([hidden])) { max-width: 96rem; }
 #radar-group-form { max-width: 27rem; }
 #radar-group-clans { font: inherit; color: inherit; background: #101820; border: 1px solid #4e727e; padding: .5rem; }
 #radar-feed details { margin: .55rem 0; }
+.radar-age-legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; font-size: .85rem; }
+.radar-age-legend span, .radar-table tr[data-age] td { color: var(--age-color, #d0d0d0); }
+#radar-feed [data-age="1"] { --age-color: #ff6674; }
+#radar-feed [data-age="5"] { --age-color: #ffab54; }
+#radar-feed [data-age="10"] { --age-color: #ffdf55; }
+#radar-feed [data-age="30"] { --age-color: #a5d86a; }
+#radar-map-picker { display: flex; gap: .6rem; align-items: center; max-width: 28rem; }
+#radar-map-picker label { white-space: nowrap; }

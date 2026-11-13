@@ -4,7 +4,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="theme-color" content="#101820"><title>SkyNet</title>
-<link rel="stylesheet" href="style.css?v=radar-modes"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-modes" defer></script>
+<link rel="stylesheet" href="style.css?v=radar-regions"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-regions" defer></script>
 </head><body><main>
 <header><h1>SkyNet</h1><button id="logout" class="secondary" hidden>登出</button></header>
 <p id="status" role="status" aria-live="polite">正在載入登入程式；若長時間停留，請重新整理網頁。</p>
@@ -45,6 +45,8 @@
 <label for="radar-search">搜尋名稱</label><input id="radar-search" type="search" placeholder="角色或 BOSS 名稱"></div>
 </details>
 <p id="radar-status" class="hint" role="status"></p>
+<div id="radar-map-picker" hidden><label for="radar-map-choice">選擇地圖</label><select id="radar-map-choice"></select></div>
+<p class="radar-age-legend"><span data-age="1">1 分內</span><span data-age="5">1～5 分</span><span data-age="10">5～10 分</span><span data-age="30">10～30 分</span><span data-age="60">30～60 分</span></p>
 <section id="radar-map" class="card" hidden>
 <div class="toolbar"><h2 id="radar-map-title">地圖</h2><button id="radar-map-close" class="secondary" type="button">關閉地圖</button></div>
 <p id="radar-map-detail" class="hint" role="status"></p>

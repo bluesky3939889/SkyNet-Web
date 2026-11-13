@@ -24,6 +24,19 @@ window.skynetRadar = (() => {
     ["radar-map-filter", "map_name", "全部地圖"],
   ];
   let activeGroup = "";
+  const withinHour = row => Date.parse(row.occurred_at) >= Date.now() - 3600000;
+  const ageBracket = row => [1, 5, 10, 30, 60].find(
+    minutes => Date.now() - Date.parse(row.occurred_at) <= minutes * 60000
+  ) || 60;
+  const markerColors = {1:"#ff6674",5:"#ffab54",10:"#ffdf55",30:"#a5d86a",60:"#d0d0d0"};
+  const mapChoice = $("radar-map-choice");
+  let mapRows = [];
+  mapChoice.addEventListener("change", () => {
+    const row = mapRows.find(item => item.map_asset === mapChoice.value);
+    if (row) showMap(row);
+    else closeMap();
+    render();
+  });
   const modes = new Map([
     ["report", "雷達回報"], ["map", "地圖模式"], ["boss", "BOSS 偵測"],
     ["phase", "女皇憤怒事件"], ["banner", "橫幅位置推估"],
@@ -184,6 +197,31 @@ window.skynetRadar = (() => {
     const ctx = canvas.getContext("2d");
     const x = selected.map_px * canvas.width, y = selected.map_py * canvas.height;
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const region of selected.map_regions || []) {
+      ctx.beginPath();
+      region.points.forEach(([px, py], index) => {
+        const point = [px * canvas.width, py * canvas.height];
+        if (index === 0) ctx.moveTo(...point);
+        else ctx.lineTo(...point);
+      });
+      ctx.closePath();
+      ctx.fillStyle = "#5ce7cb22";
+      ctx.strokeStyle = "#5ce7cb";
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+      const [px, py] = region.points[0];
+      ctx.font = "14px sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText(region.name, px * canvas.width + 3, py * canvas.height + 15);
+    }
+    if (mode === "map") for (const row of mapRows) {
+      if (row.map_asset !== selected.map_asset || !withinHour(row) || row.id === selected.id) continue;
+      ctx.beginPath();
+      ctx.arc(row.map_px * canvas.width, row.map_py * canvas.height, 5, 0, Math.PI * 2);
+      ctx.fillStyle = markerColors[ageBracket(row)];
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(x, y, 13, 0, Math.PI * 2);
     ctx.fillStyle = "#e33c4555";
@@ -271,6 +309,8 @@ window.skynetRadar = (() => {
   }
 
   function render() {
+    records = records.filter(withinHour);
+    if (selected && !withinHour(selected)) closeMap();
     const groupBar = $("radar-groups");
     const groups = [...new Set([...records.flatMap(groupsFor),
       ...[...groupOverrides].filter(([, clans]) => clans !== null).map(([name]) => name)])].sort();
@@ -307,13 +347,26 @@ window.skynetRadar = (() => {
       if (routes.has(previous)) region.value = previous;
     }
     const kind = $("radar-kind").value;
-    const filtered = records.filter(row => (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") :
+    const matching = records.filter(row => (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") &&
+      [row.map_px,row.map_py].every(Number.isFinite) :
       mode === "phase" ? row.kind === "phase" || (row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)) :
       row.kind === mode && !(mode === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location))) &&
       (!region.value || region.value === row.route_id) && (!kind || mode !== "map" || kind === row.kind) &&
       (!activeGroup || groupsFor(row).includes(activeGroup)) &&
       radarFilters.every(([id, field]) => !$(id).value || $(id).value === row[field]) &&
-      (!search || [row.name, row.nickname].some(name => name?.toLocaleLowerCase().includes(search))) &&
+      (!search || [row.name, row.nickname].some(name => name?.toLocaleLowerCase().includes(search))));
+    mapRows = mode === "map" ? matching : [];
+    $("radar-map-picker").hidden = mode !== "map";
+    const maps = new Map(mapRows.map(row => [row.map_asset, row.map_name || "未命名地圖"]));
+    const mapId = mapChoice.value;
+    if (maps.size !== mapChoice.options.length - 1 ||
+        [...mapChoice.options].slice(1).some(option => maps.get(option.value) !== option.textContent)) {
+      mapChoice.replaceChildren(new Option("請選擇地圖", ""), ...[...maps].map(([id, name]) => new Option(name, id)));
+      mapChoice.value = maps.has(mapId) ? mapId : "";
+    }
+    if (mode === "map" && selected && !maps.has(selected.map_asset)) closeMap();
+    if (mode === "map" && image) drawMap(false);
+    const filtered = matching.filter(row => (!mapChoice.value || mode !== "map" || row.map_asset === mapChoice.value) &&
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
@@ -327,6 +380,7 @@ window.skynetRadar = (() => {
     }));
     $("radar-rows").replaceChildren(...filtered.map(row => {
       const tr = document.createElement("tr");
+      tr.dataset.age = ageBracket(row);
       for (const [, , valueFor] of visible) {
         const cell = document.createElement("td");
         const value = valueFor(row);
@@ -367,7 +421,8 @@ window.skynetRadar = (() => {
     let delay = 5000;
     try {
       const query = new URLSearchParams({
-        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups,nickname",
+        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups,nickname,map_regions",
+        occurred_at:"gte."+new Date(Date.now()-3600000).toISOString(),
         order:after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc", limit:"100"
       });
       if (after) query.set("or", `(created_at.gt.${after.created_at},and(created_at.eq.${after.created_at},id.gt.${after.id}),and(created_at.eq.${after.created_at},id.eq.${after.id},user_id.gt.${after.user_id}))`);
@@ -414,6 +469,7 @@ window.skynetRadar = (() => {
       else $("radar-status").textContent = [403,404].includes(error.status) ?
         "雷達資料表尚未就緒，請管理者執行 7.0.0 的 schema.sql。" : "雷達回報暫時無法更新。";
     } finally {
+      if (active === session && epoch === requestEpoch) render();
       refresh.disabled = false;
       if (active && opened && !document.hidden) poll = setTimeout(refreshRadar,delay);
     }
