@@ -2,9 +2,9 @@
 <html lang="zh-Hant"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="theme-color" content="#101820"><title>SkyNet · Supabase 偵測看板</title>
-<link rel="stylesheet" href="style.css?v=20261106-login2"><script src="config.js?v=20261106-login2" defer></script><script src="board.js?v=20261106-login2" defer></script>
+<link rel="stylesheet" href="style.css?v=7.0.0-private-map"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=7.0.0" defer></script><script src="radar.js?v=7.0.0-private-map" defer></script>
 </head><body><main>
 <header><span class="mark" aria-hidden="true">◎</span><div><small>SKYNET / PRIVATE LIVE BOARD</small><h1>人員偵測看板</h1></div><button id="logout" class="secondary" hidden>登出</button></header>
 <p id="status" role="status" aria-live="polite">正在載入登入程式；若長時間停留，請重新整理網頁。</p>
@@ -17,8 +17,27 @@
 <label for="password">密碼</label><input id="password" type="password" autocomplete="current-password" required>
 <label class="remember" for="remember"><input id="remember" type="checkbox"><span>在此裝置保持登入</span></label>
 <p class="hint">使用管理者建立的完整 Email 與密碼。每個帳號只能查看自己的紀錄。</p><button id="login" type="submit">登入看板</button></form></section>
+<nav id="board-tabs" class="board-tabs" aria-label="看板" hidden>
+<button id="show-people" type="button" aria-pressed="true">人員偵測</button>
+<button id="show-radar" type="button" aria-pressed="false">雷達回報</button>
+</nav>
 <section id="feed" hidden><div class="toolbar"><h2>最近事件 <span id="count">0</span></h2><button id="refresh" class="secondary">立即更新</button></div>
 <div class="filters"><label for="device">裝置</label><select id="device"><option value="">全部裝置</option></select><label for="search">搜尋角色</label><input id="search" placeholder="輸入角色名稱"></div>
 <p class="hint">每 5 秒更新，背景暫停。顯示最近 100 筆，時間為台北時間。</p><p id="checked" class="hint"></p><p id="empty" class="card" hidden>尚無紀錄。請保持 Client 側錄並啟用人員偵測。</p><ol id="events"></ol></section>
-<footer>SkyNet · Supabase 版 · 私人帳號資料隔離</footer>
+<section id="radar-feed" hidden>
+<div class="toolbar"><h2>雷達回報</h2><button id="radar-refresh" class="secondary" type="button">立即更新</button></div>
+<div class="filters"><label for="radar-region">分區</label><select id="radar-region"><option value="">全部分區</option></select>
+<label for="radar-kind">類型</label><select id="radar-kind"><option value="">全部類型</option><option value="report">一般回報</option><option value="boss">BOSS</option></select></div>
+<p id="radar-status" class="hint" role="status"></p>
+<section id="radar-map" class="card" hidden>
+<div class="toolbar"><h2 id="radar-map-title">地圖</h2><button id="radar-map-close" class="secondary" type="button">關閉地圖</button></div>
+<p id="radar-map-detail" class="hint" role="status"></p>
+<div class="map-actions"><button id="radar-zoom-out" type="button">縮小</button><button id="radar-zoom-in" type="button">放大</button><button id="radar-center" type="button">回到標記</button></div>
+<div class="map-actions"><button id="radar-select" type="button" aria-pressed="false">框選回報</button><button id="radar-clear-area" type="button">清除框選</button></div>
+<p id="radar-area-status" class="hint" role="status"></p>
+<div id="radar-map-scroll" tabindex="0" aria-label="地圖，可捲動"><canvas id="radar-canvas" aria-label="地圖上的回報位置"></canvas></div>
+</section>
+<ol id="radar-rows"></ol>
+</section>
+<footer>SkyNet 7.0.0 · Supabase 私人看板</footer>
 </main></body></html>

@@ -49,6 +49,7 @@ async function token(session,force=false) {
   try { return await promise; } finally { if (refreshFlight?.promise===promise) refreshFlight=null; }
 }
 function resetView() {
+  window.skynetRadar?.reset();
   rows=[];cursor="";signature="";$("events").replaceChildren();$("count").textContent="0";
   $("checked").textContent="";$("search").value="";
   $("device").replaceChildren(new Option("全部裝置",""));
@@ -60,7 +61,7 @@ function endSession(message="已登出。") {
   status(message);
   return old;
 }
-function showFeed() {$("auth").hidden=true;$("feed").hidden=$("logout").hidden=false;}
+function showFeed() {$("auth").hidden=true;$("feed").hidden=$("logout").hidden=false;window.skynetRadar?.show();}
 function render() {
   const device=$("device").value, query=$("search").value.trim().toLocaleLowerCase();
   const filtered=rows.filter(row=>(!device||row.device===device)&&(!query||row.name.toLocaleLowerCase().includes(query)));
@@ -77,7 +78,7 @@ function render() {
 async function refresh() {
   clearTimeout(timer);
   const session=active;
-  if (!session||busy||document.hidden) return;
+  if (!session||busy||document.hidden||$("feed").hidden) return;
   busy=true;$("refresh").disabled=true;
   try {
     const query=new URLSearchParams({select:"id,user_id,occurred_at,created_at,device,name,kind",user_id:"eq."+session.owner,order:"created_at.desc,id.desc",limit:"100"});
