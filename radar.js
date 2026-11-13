@@ -179,16 +179,30 @@ window.skynetRadar = (() => {
     try {
       const query = new URLSearchParams({
         select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py",
-        user_id:"eq." + session.owner, order:after ? "created_at.asc,id.asc" : "created_at.desc,id.desc", limit:"100"
+        order:after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc", limit:"100"
       });
-      if (after) query.set("or", `(created_at.gt.${after.created_at},and(created_at.eq.${after.created_at},id.gt.${after.id}))`);
+      if (after) query.set("or", `(created_at.gt.${after.created_at},and(created_at.eq.${after.created_at},id.gt.${after.id}),and(created_at.eq.${after.created_at},id.eq.${after.id},user_id.gt.${after.user_id}))`);
       let result;
       for (let attempt=0; attempt<2; ++attempt) {
-        try { result = await api(session,"/rest/v1/skynet_radar?" + query,null,await token(session,Boolean(attempt))); break; }
+        try {
+          const access = await token(session,Boolean(attempt));
+          const membership = await api(session,"/rest/v1/skynet_radar_members?select=user_id&limit=1",null,access);
+          if (active !== session || epoch !== requestEpoch) return;
+          if (!Array.isArray(membership) || !membership.some(member => member.user_id === session.owner)) {
+            records = [];
+            after = null;
+            closeMap();
+            render();
+            $("radar-status").textContent = "此帳號尚未加入共享雷達，請聯絡管理員。";
+            return;
+          }
+          result = await api(session,"/rest/v1/skynet_radar?" + query,null,access);
+          break;
+        }
         catch (error) { if (error.status !== 401 || attempt) throw error; }
       }
       if (active !== session || epoch !== requestEpoch) return;
-      if (!Array.isArray(result) || result.some(row => row.user_id !== session.owner ||
+      if (!Array.isArray(result) || result.some(row => !/^[a-f0-9-]{36}$/i.test(row.user_id) ||
           !/^[a-f0-9-]{36}$/i.test(row.id) || !Number.isFinite(Date.parse(row.created_at)) ||
           !Number.isFinite(Date.parse(row.occurred_at)))) throw new Error("invalid radar data");
       if (result.length) {
@@ -196,7 +210,11 @@ window.skynetRadar = (() => {
         after = incremental ? result.at(-1) : result[0];
         if (incremental && result.length === 100) delay = 250;
         const combined = new Map(records.map(row => [row.id,row]));
-        for (const row of result) combined.set(row.id,row);
+        for (const row of result) {
+          const previous = combined.get(row.id);
+          if (!previous || row.created_at > previous.created_at ||
+              (row.created_at === previous.created_at && row.user_id > previous.user_id)) combined.set(row.id,row);
+        }
         records = [...combined.values()].sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)).slice(0,100);
         render();
       }
