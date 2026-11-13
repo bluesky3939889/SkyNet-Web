@@ -24,6 +24,39 @@ window.skynetRadar = (() => {
     ["radar-map-filter", "map_name", "全部地圖"],
   ];
   let activeGroup = "";
+  const columns = [
+    ["name", "玩家／BOSS", row => row.name],
+    ["time", "通報時間", row => clock.format(new Date(row.occurred_at))],
+    ["kind", "類型", row => row.kind === "boss" ? "BOSS" : "回報"],
+    ["route", "分區", row => row.route_title],
+    ["clan", "血盟", row => row.clan_name],
+    ["groups", "群組", row => row.clan_groups?.join("、")],
+    ["server", "伺服器", row => row.server_name],
+    ["map", "地圖", row => row.map_name],
+    ["location", "位置", row => row.location],
+    ["coordinates", "座標", row => Number.isFinite(row.x) && Number.isFinite(row.y) ? `X ${row.x} / Y ${row.y}` : ""],
+    ["action", "地圖操作", mapButton],
+  ];
+  const columnStorageKey = "skynet-radar-hidden-columns";
+  const hiddenColumns = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(columnStorageKey));
+    if (Array.isArray(saved)) for (const key of saved) if (key !== "name") hiddenColumns.add(key);
+  } catch {}
+  for (const [key, title] of columns.slice(1)) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !hiddenColumns.has(key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) hiddenColumns.delete(key);
+      else hiddenColumns.add(key);
+      try { localStorage.setItem(columnStorageKey, JSON.stringify([...hiddenColumns])); } catch {}
+      render();
+    });
+    label.append(checkbox, title);
+    $("radar-columns").append(label);
+  }
 
   function reset() {
     ++epoch;
@@ -182,15 +215,28 @@ window.skynetRadar = (() => {
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
+    const visible = columns.filter(([key]) => !hiddenColumns.has(key));
+    $("radar-empty").hidden = filtered.length > 0;
+    $("radar-head").replaceChildren(...visible.map(([, title]) => {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = title;
+      return th;
+    }));
     $("radar-rows").replaceChildren(...filtered.map(row => {
-      const li = document.createElement("li"), name = document.createElement("strong");
-      const badge = document.createElement("span"), info = document.createElement("small");
-      name.textContent = row.name;
-      badge.textContent = row.kind === "boss" ? "BOSS" : "回報";
-      info.textContent = [row.route_title, row.clan_name, row.server_name, row.map_name, row.location,
-        row.x !== null && row.y !== null ? `X ${row.x} / Y ${row.y}` : "",
-        clock.format(new Date(row.occurred_at))].filter(Boolean).join(" · ");
-      li.append(name, badge, info);
+      const tr = document.createElement("tr");
+      for (const [, , valueFor] of visible) {
+        const cell = document.createElement("td");
+        const value = valueFor(row);
+        if (typeof value === "object" && value) cell.append(value);
+        else cell.textContent = value || "—";
+        tr.append(cell);
+      }
+      return tr;
+    }));
+  }
+
+  function mapButton(row) {
       if (/^[a-f0-9]{64}$/.test(row.map_asset || "") &&
           [row.map_px,row.map_py].every(value => Number.isFinite(value) && value >= 0 && value <= 1)) {
         const button = document.createElement("button");
@@ -204,10 +250,9 @@ window.skynetRadar = (() => {
             drawMap();
           } else return showMap(row);
         });
-        li.append(button);
+        return button;
       }
-      return li;
-    }));
+    return null;
   }
 
   async function refreshRadar() {
