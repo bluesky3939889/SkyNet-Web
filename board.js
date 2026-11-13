@@ -3,8 +3,7 @@ const $ = id => document.getElementById(id);
 const storageKey = "skynet-supabase-session-v1";
 const configKey = "skynet-supabase-project-v1";
 const clock = new Intl.DateTimeFormat("zh-TW", {timeZone:"Asia/Taipei", dateStyle:"medium", timeStyle:"medium"});
-let active = null, timer = null, busy = false, refreshFlight = null, generation = 0;
-let rows = [], cursor = "", signature = "";
+let active = null, refreshFlight = null, generation = 0;
 
 function status(text, error=false) { $("status").textContent=text; $("status").dataset.error=String(error); }
 function validateProject(url,key) {
@@ -48,26 +47,21 @@ async function token(session,force=false) {
   refreshFlight={session,promise};
   try { return await promise; } finally { if (refreshFlight?.promise===promise) refreshFlight=null; }
 }
-function resetView() {
-  window.skynetRadar?.reset();
-  rows=[];cursor="";signature="";$("events").replaceChildren();$("count").textContent="0";
-  $("checked").textContent="";$("search").value="";
-  $("device").replaceChildren(new Option("全部裝置",""));
-}
+function resetView() { window.skynetRadar?.reset(); }
 function endSession(message="已登出。") {
-  ++generation;const old=active;active=null;clearTimeout(timer);refreshFlight=null;resetView();
-  $("auth").hidden=false;$("feed").hidden=$("logout").hidden=true;$("password").value="";
+  ++generation;const old=active;active=null;refreshFlight=null;resetView();
+  $("auth").hidden=false;$("logout").hidden=true;$("password").value="";
   $("password-change").hidden=true;
   $("password-change-form").reset();
   try {localStorage.removeItem(storageKey);sessionStorage.removeItem(storageKey);} catch {}
   status(message);
   return old;
 }
-function showFeed() {$("auth").hidden=true;$("feed").hidden=$("logout").hidden=false;window.skynetRadar?.show();}
+function showFeed() {$("auth").hidden=true;$("logout").hidden=false;window.skynetRadar?.show();}
 async function openSession(session, user) {
   if (active!==session) return;
   if (user.app_metadata?.skynet_initial_password === true) {
-    $("auth").hidden=$("feed").hidden=true;
+    $("auth").hidden=true;
     $("logout").hidden=$("password-change").hidden=false;
     status("請更換管理員提供的初始密碼。");
     $("new-password").focus();
@@ -75,7 +69,7 @@ async function openSession(session, user) {
   }
   $("password-change").hidden=true;
   showFeed();
-  await refresh();
+
 }
 $("password-change-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -105,53 +99,6 @@ $("password-change-form").addEventListener("submit", async event => {
     button.disabled=false;
   }
 });
-function render() {
-  const device=$("device").value, query=$("search").value.trim().toLocaleLowerCase();
-  const filtered=rows.filter(row=>(!device||row.device===device)&&(!query||row.name.toLocaleLowerCase().includes(query)));
-  const next=JSON.stringify(filtered);
-  if (next===signature) return;
-  signature=next;
-  $("events").replaceChildren(...filtered.map(event=>{
-    const li=document.createElement("li"),title=document.createElement("strong"),badge=document.createElement("span"),detail=document.createElement("small");
-    title.textContent=event.name;badge.className=event.kind==="enter"?"enter":"leave";badge.textContent=event.kind==="enter"?"出現":"離開";
-    detail.textContent=event.device+" · "+clock.format(new Date(event.occurred_at));li.append(title,badge,detail);return li;
-  }));
-  $("count").textContent=String(filtered.length);$("empty").hidden=filtered.length>0;
-}
-async function refresh() {
-  clearTimeout(timer);
-  const session=active;
-  if (!session||busy||document.hidden||$("feed").hidden) return;
-  busy=true;$("refresh").disabled=true;
-  try {
-    const query=new URLSearchParams({select:"id,user_id,occurred_at,created_at,device,name,kind",user_id:"eq."+session.owner,order:"created_at.desc,id.desc",limit:"100"});
-    if (cursor) query.set("created_at","gte."+cursor);
-    let result;
-    for (let attempt=0;attempt<2;attempt++) {
-      try {result=await api(session,"/rest/v1/skynet_events?"+query,null,await token(session,Boolean(attempt)));break;}
-      catch(error) {if (error.status!==401||attempt) throw error;}
-    }
-    if (active!==session) return;
-    if (!Array.isArray(result)||result.some(e=>e.user_id!==session.owner||typeof e.id!=="string"||typeof e.name!=="string"||typeof e.device!=="string"||!["enter","leave"].includes(e.kind)||!Number.isFinite(Date.parse(e.occurred_at))||!Number.isFinite(Date.parse(e.created_at)))) throw new Error("資料格式或權限與登入帳號不符");
-    if (result.length) cursor=result[0].created_at;
-    const combined=new Map(rows.map(e=>[e.id,e]));for (const row of result) combined.set(row.id,row);
-    rows=[...combined.values()].sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id)).slice(0,100);
-    rows.sort((a,b)=>Date.parse(b.occurred_at)-Date.parse(a.occurred_at));
-    const devices=[...new Set(rows.map(r=>r.device))].sort();const previous=$("device").value;
-    if (JSON.stringify(devices)!==JSON.stringify([...$("device").options].slice(1).map(o=>o.value))) {
-      $("device").replaceChildren(new Option("全部裝置",""),...devices.map(d=>new Option(d,d)));
-      if (devices.includes(previous)) $("device").value=previous;
-    }
-    render();$("checked").textContent="最後查詢　"+clock.format(new Date());status("已連線 · 只顯示此帳號的資料");
-  } catch (error) {
-    if (active!==session) return;
-    if ([400,401].includes(error.status)) endSession("登入已失效，請重新輸入 Email 與密碼。Client 的待傳紀錄會保留。");
-    else status(error.status===403?"權限不足，請確認已執行 schema.sql。":"暫時無法更新，保留目前畫面並稍後重試。",true);
-  } finally {
-    busy=false;$("refresh").disabled=false;
-    if (active&&!document.hidden) timer=setTimeout(refresh,5000);
-  }
-}
 $("login-form").addEventListener("submit",async event=>{
   event.preventDefault();
   if ($("login").disabled) return;
@@ -179,10 +126,6 @@ $("login-form").addEventListener("submit",async event=>{
   finally {$("login").disabled=false;$("login").textContent="登入看板";}
 });
 $("logout").addEventListener("click",()=>{const old=endSession();if(old?.access) api(old,"/auth/v1/logout",{},old.access).catch(()=>{});});
-$("refresh").addEventListener("click",refresh);$("device").addEventListener("change",render);$("search").addEventListener("input",render);
-document.addEventListener("visibilitychange",()=>{clearTimeout(timer);if(!document.hidden) refresh();});
-window.addEventListener("pagehide",()=>clearTimeout(timer));
-window.addEventListener("pageshow",()=>{if(active&&!document.hidden)refresh();});
 (async function restore(){
   status("登入程式已就緒，請輸入看板 Email 與密碼。");
   let project=window.SKYNET_PUBLIC_CONFIG||{};

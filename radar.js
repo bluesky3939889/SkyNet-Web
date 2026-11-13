@@ -24,26 +24,123 @@ window.skynetRadar = (() => {
     ["radar-map-filter", "map_name", "全部地圖"],
   ];
   let activeGroup = "";
+  const modes = new Map([
+    ["report", "雷達回報"], ["map", "地圖模式"], ["boss", "BOSS 偵測"],
+    ["phase", "女皇憤怒事件"], ["banner", "橫幅位置推估"],
+  ]);
+  const readPreference = (key, fallback) => {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+  };
+  const savePreference = (key, value) => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  };
+  const orderKey = "skynet-radar-mode-order";
+  const savedOrder = readPreference(orderKey, []);
+  const modeOrder = [...new Set([...(Array.isArray(savedOrder) ? savedOrder : []), ...modes.keys()])]
+    .filter(id => modes.has(id));
+  let mode = "report";
+  const groupKey = "skynet-radar-group-overrides";
+  const groupOverrides = new Map();
+  const savedGroups = readPreference(groupKey, []);
+  if (Array.isArray(savedGroups)) for (const entry of savedGroups) {
+    if (Array.isArray(entry) && typeof entry[0] === "string" &&
+        (entry[1] === null || Array.isArray(entry[1]))) groupOverrides.set(...entry);
+  }
+  const buttonFor = (label, action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", action);
+    return button;
+  };
+  function renderModes() {
+    $("radar-heading").textContent = modes.get(mode);
+    $("radar-kind").hidden = $("radar-kind-label").hidden = mode !== "map";
+    $("radar-modes").replaceChildren(...modeOrder.map(id => {
+      const button = buttonFor(modes.get(id), () => {
+        mode = id;
+        closeMap();
+        $("radar-kind").value = "";
+        renderModes();
+        render();
+      });
+      button.setAttribute("aria-pressed", String(id === mode));
+      return button;
+    }));
+    $("radar-mode-order").replaceChildren(...modeOrder.map((id, index) => {
+      const row = document.createElement("div");
+      row.className = "radar-order-row";
+      const move = offset => {
+        const target = index + offset;
+        [modeOrder[index], modeOrder[target]] = [modeOrder[target], modeOrder[index]];
+        savePreference(orderKey, modeOrder);
+        renderModes();
+      };
+      const up = buttonFor("上移", () => move(-1));
+      const down = buttonFor("下移", () => move(1));
+      up.disabled = index === 0;
+      down.disabled = index === modeOrder.length - 1;
+      row.append(modes.get(id), up, down);
+      return row;
+    }));
+  }
+  function groupsFor(row) {
+    const groups = (row.clan_groups || []).filter(group => !groupOverrides.has(group));
+    const clan = row.clan_name?.toLocaleLowerCase();
+    if (clan) for (const [group, clans] of groupOverrides) {
+      if (clans?.some(name => name.toLocaleLowerCase() === clan)) groups.push(group);
+    }
+    return groups;
+  }
+  function editGroup(group) {
+    $("radar-group-name").value = group;
+    const clans = groupOverrides.get(group) ?? records
+      .filter(row => row.clan_groups?.includes(group)).map(row => row.clan_name).filter(Boolean);
+    $("radar-group-clans").value = [...new Set(clans)].join("\n");
+  }
+  function saveGroup(remove) {
+    const group = $("radar-group-name").value.trim();
+    if (!group) return;
+    const clans = [...new Set($("radar-group-clans").value.split(/\r?\n/).map(name => name.trim()).filter(Boolean))];
+    groupOverrides.set(group, remove ? null : clans);
+    savePreference(groupKey, [...groupOverrides]);
+    if (remove && activeGroup === group) activeGroup = "";
+    $("radar-group-status").textContent = remove ? "已移除群組。" : "已儲存到此瀏覽器。";
+    render();
+  }
+  $("radar-group-form").addEventListener("submit", event => { event.preventDefault(); saveGroup(false); });
+  $("radar-group-delete").addEventListener("click", () => saveGroup(true));
   const columns = [
-    ["name", "玩家／BOSS", row => row.name],
-    ["time", "通報時間", row => clock.format(new Date(row.occurred_at))],
-    ["kind", "類型", row => row.kind === "boss" ? "BOSS" : "回報"],
-    ["route", "分區", row => row.route_title],
+    ["time", "回報時間", row => reportClock.format(new Date(row.occurred_at))],
+    ["age", "多久前", row => {
+      const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(row.occurred_at)) / 60000));
+      if (minutes < 1) return "剛剛";
+      if (minutes < 60) return `${minutes} 分前`;
+      if (minutes < 1440) return `${Math.floor(minutes / 60)} 小時前`;
+      return `${Math.floor(minutes / 1440)} 天前`;
+    }],
+    ["name", "角色／BOSS", row => row.name],
+    ["nickname", "暱稱", row => row.nickname],
     ["clan", "血盟", row => row.clan_name],
-    ["groups", "群組", row => row.clan_groups?.join("、")],
     ["server", "伺服器", row => row.server_name],
     ["map", "地圖", row => row.map_name],
-    ["location", "位置", row => row.location],
+    ["location", "大概位置", row => row.location],
+    ["route", "分區", row => row.route_title],
+    ["groups", "群組", row => groupsFor(row).join("、")],
+    ["kind", "類型", row => modes.get(row.kind)],
     ["coordinates", "座標", row => Number.isFinite(row.x) && Number.isFinite(row.y) ? `X ${row.x} / Y ${row.y}` : ""],
     ["action", "地圖操作", mapButton],
   ];
+  const reportClock = new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
   const columnStorageKey = "skynet-radar-hidden-columns";
   const hiddenColumns = new Set();
   try {
     const saved = JSON.parse(localStorage.getItem(columnStorageKey));
     if (Array.isArray(saved)) for (const key of saved) if (key !== "name") hiddenColumns.add(key);
   } catch {}
-  for (const [key, title] of columns.slice(1)) {
+  for (const [key, title] of columns.filter(([key]) => key !== "name")) {
     const label = document.createElement("label");
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -59,6 +156,9 @@ window.skynetRadar = (() => {
   }
 
   function reset() {
+    mode = "report";
+    $("radar-group-form").reset();
+    $("radar-group-status").textContent = "";
     ++epoch;
     clearTimeout(poll);
     opened = false;
@@ -74,9 +174,7 @@ window.skynetRadar = (() => {
     $("radar-groups").hidden = true;
     $("radar-search").value = "";
     for (const [id, , label] of radarFilters) $(id).replaceChildren(new Option(label, ""));
-    $("board-tabs").hidden = $("radar-feed").hidden = true;
-    $("show-people").setAttribute("aria-pressed", "true");
-    $("show-radar").setAttribute("aria-pressed", "false");
+    $("radar-feed").hidden = true;
   }
 
   function drawMap(center = true) {
@@ -174,7 +272,8 @@ window.skynetRadar = (() => {
 
   function render() {
     const groupBar = $("radar-groups");
-    const groups = [...new Set(records.flatMap(row => row.clan_groups || []))].sort();
+    const groups = [...new Set([...records.flatMap(groupsFor),
+      ...[...groupOverrides].filter(([, clans]) => clans !== null).map(([name]) => name)])].sort();
     if (activeGroup && !groups.includes(activeGroup)) activeGroup = "";
     groupBar.hidden = !groups.length;
     const groupOptions = ["", ...groups];
@@ -185,7 +284,7 @@ window.skynetRadar = (() => {
         button.type = "button";
         button.value = group;
         button.textContent = group || "全部群組";
-        button.addEventListener("click", () => { activeGroup = group; closeMap(); render(); });
+        button.addEventListener("click", () => { activeGroup = group; editGroup(group); closeMap(); render(); });
         return button;
       }));
     }
@@ -208,14 +307,17 @@ window.skynetRadar = (() => {
       if (routes.has(previous)) region.value = previous;
     }
     const kind = $("radar-kind").value;
-    const filtered = records.filter(row => (!region.value || region.value === row.route_id) && (!kind || kind === row.kind) &&
-      (!activeGroup || row.clan_groups?.includes(activeGroup)) &&
+    const filtered = records.filter(row => (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") :
+      mode === "phase" ? row.kind === "phase" || (row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)) :
+      row.kind === mode && !(mode === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location))) &&
+      (!region.value || region.value === row.route_id) && (!kind || mode !== "map" || kind === row.kind) &&
+      (!activeGroup || groupsFor(row).includes(activeGroup)) &&
       radarFilters.every(([id, field]) => !$(id).value || $(id).value === row[field]) &&
-      (!search || row.name.toLocaleLowerCase().includes(search)) &&
+      (!search || [row.name, row.nickname].some(name => name?.toLocaleLowerCase().includes(search))) &&
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
-    const visible = columns.filter(([key]) => !hiddenColumns.has(key));
+    const visible = columns.filter(([key]) => !hiddenColumns.has(key) || (mode === "map" && key === "action"));
     $("radar-empty").hidden = filtered.length > 0;
     $("radar-head").replaceChildren(...visible.map(([, title]) => {
       const th = document.createElement("th");
@@ -265,7 +367,7 @@ window.skynetRadar = (() => {
     let delay = 5000;
     try {
       const query = new URLSearchParams({
-        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups",
+        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups,nickname",
         order:after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc", limit:"100"
       });
       if (after) query.set("or", `(created_at.gt.${after.created_at},and(created_at.eq.${after.created_at},id.gt.${after.id}),and(created_at.eq.${after.created_at},id.eq.${after.id},user_id.gt.${after.user_id}))`);
@@ -303,8 +405,8 @@ window.skynetRadar = (() => {
               (row.created_at === previous.created_at && row.user_id > previous.user_id)) combined.set(row.id,row);
         }
         records = [...combined.values()].sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)).slice(0,100);
-        render();
       }
+      render();
       $("radar-status").textContent = records.length ? "最後同步 " + clock.format(new Date()) : "尚無雷達回報。請確認 Client 的上傳設定。";
     } catch (error) {
       if (active !== session || epoch !== requestEpoch) return;
@@ -317,18 +419,6 @@ window.skynetRadar = (() => {
     }
   }
 
-  function switchBoard(radar) {
-    opened = radar;
-    $("feed").hidden = radar;
-    $("radar-feed").hidden = !radar;
-    $("show-people").setAttribute("aria-pressed", String(!radar));
-    $("show-radar").setAttribute("aria-pressed", String(radar));
-    clearTimeout(radar ? timer : poll);
-    if (radar) refreshRadar();
-    else refresh();
-  }
-  $("show-people").addEventListener("click", () => switchBoard(false));
-  $("show-radar").addEventListener("click", () => switchBoard(true));
   $("radar-refresh").addEventListener("click", refreshRadar);
   $("radar-region").addEventListener("change", () => {closeMap(); render();});
   $("radar-kind").addEventListener("change", () => {closeMap(); render();});
@@ -369,7 +459,7 @@ window.skynetRadar = (() => {
   });
   window.addEventListener("pagehide", () => clearTimeout(poll));
   window.addEventListener("pageshow", refreshRadar);
-  function show() { $("board-tabs").hidden = false; }
-  if (active) show();
+  function show() { opened = true; $("radar-feed").hidden = false; renderModes(); refreshRadar(); }
+
   return {show, reset};
 })();

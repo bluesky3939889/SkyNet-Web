@@ -12,3 +12,15 @@ main:has(#radar-feed:not([hidden])) { max-width: 96rem; }
 .radar-table tbody tr:nth-child(even) { background: #192731; }
 .radar-table tbody tr:hover { background: #233d4a; }
 .radar-table button { min-height: 32px; padding: .25rem .55rem; }
+.radar-table-scroll { background: #192738; }
+.radar-table th, .radar-table td { padding: .32rem .65rem; border-bottom: 0; }
+.radar-table th { background: #192738; color: #bdcfe1; border-bottom: 1px solid #526275; }
+.radar-table td { color: #a5d86a; font-variant-numeric: tabular-nums; }
+.radar-table tbody tr:nth-child(even) { background: #1c2c3e; }
+.radar-table tbody tr:hover { background: #293e51; }
+.radar-table button { min-height: 26px; padding: .1rem .45rem; font-size: .82rem; }
+.radar-order-row { display: grid; grid-template-columns: minmax(8rem, 1fr) auto auto; gap: .5rem; align-items: center; max-width: 27rem; margin: .35rem 0; }
+.radar-order-row button { min-height: 34px; padding: .25rem .6rem; }
+#radar-group-form { max-width: 27rem; }
+#radar-group-clans { font: inherit; color: inherit; background: #101820; border: 1px solid #4e727e; padding: .5rem; }
+#radar-feed details { margin: .55rem 0; }
