@@ -88,13 +88,15 @@ $("password-change-form").addEventListener("submit", async event => {
   }
   button.disabled=true;
   try {
-    const user=await api(session,"/auth/v1/user",{password},await token(session),"PUT");
+    const access=await token(session);
+    await api(session,"/auth/v1/user",{password},access,"PUT");
     if (active!==session) return;
-    if (user.app_metadata?.skynet_initial_password===true) {
-      status("密碼已更新，但資料庫尚未解除首次登入限制，請聯絡管理員。",true);
-      return;
-    }
-    const old=endSession("密碼已更新，請使用新密碼登入。");
+    const ready=await api(session,"/rest/v1/rpc/skynet_password_ready",{},access).catch(()=>null);
+    if (active!==session) return;
+    const message=ready===false
+      ?"密碼已更新。首次登入限制仍在，請管理員檢查 Supabase 的換密碼觸發器。"
+      :"密碼已更新，請使用新密碼登入。";
+    const old=endSession(message);
     if (old?.access) api(old,"/auth/v1/logout?scope=local",{},old.access).catch(()=>{});
   } catch (error) {
     if (active===session) status(error.status===422
