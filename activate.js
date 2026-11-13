@@ -2,7 +2,7 @@
 
 const config = window.SKYNET_PUBLIC_CONFIG;
 const params = new URLSearchParams(location.hash.slice(1));
-let token = params.get("type") === "invite" ? params.get("access_token") : null;
+let token = ["invite", "recovery"].includes(params.get("type")) ? params.get("access_token") : null;
 history.replaceState(null, "", location.pathname);
 
 const form = document.getElementById("activate");
@@ -12,7 +12,7 @@ const submit = form.querySelector("button");
 if (token && config?.url && config?.key) {
   form.hidden = false;
 } else {
-  status.textContent = "邀請連結無效或已過期，請聯絡管理員。";
+  status.textContent = "設定密碼連結無效或已過期，請使用最新信件中的連結。";
 }
 
 form.addEventListener("submit", async (event) => {
@@ -40,7 +40,7 @@ form.addEventListener("submit", async (event) => {
       token = null;
       password.value = "";
       form.hidden = true;
-      status.textContent = "邀請連結已過期，請聯絡管理員。";
+      status.textContent = "設定密碼連結已過期，請使用最新信件中的連結。";
     } else {
       status.textContent = "無法設定密碼，請確認密碼符合要求後再試。";
     }
