@@ -18,6 +18,13 @@ window.skynetRadar = (() => {
     $("radar-map").hidden = true;
   }
 
+  const radarFilters = [
+    ["radar-clan", "clan_name", "全部血盟"],
+    ["radar-server", "server_name", "全部伺服器"],
+    ["radar-map-filter", "map_name", "全部地圖"],
+  ];
+  let activeGroup = "";
+
   function reset() {
     ++epoch;
     clearTimeout(poll);
@@ -29,6 +36,11 @@ window.skynetRadar = (() => {
     $("radar-status").textContent = "";
     $("radar-region").replaceChildren(new Option("全部分區", ""));
     $("radar-kind").value = "";
+    activeGroup = "";
+    $("radar-groups").replaceChildren();
+    $("radar-groups").hidden = true;
+    $("radar-search").value = "";
+    for (const [id, , label] of radarFilters) $(id).replaceChildren(new Option(label, ""));
     $("board-tabs").hidden = $("radar-feed").hidden = true;
     $("show-people").setAttribute("aria-pressed", "true");
     $("show-radar").setAttribute("aria-pressed", "false");
@@ -128,6 +140,33 @@ window.skynetRadar = (() => {
   }
 
   function render() {
+    const groupBar = $("radar-groups");
+    const groups = [...new Set(records.flatMap(row => row.clan_groups || []))].sort();
+    if (activeGroup && !groups.includes(activeGroup)) activeGroup = "";
+    groupBar.hidden = !groups.length;
+    const groupOptions = ["", ...groups];
+    if (groupOptions.length !== groupBar.children.length ||
+        groupOptions.some((group, index) => groupBar.children[index]?.value !== group)) {
+      groupBar.replaceChildren(...groupOptions.map(group => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.value = group;
+        button.textContent = group || "全部群組";
+        button.addEventListener("click", () => { activeGroup = group; closeMap(); render(); });
+        return button;
+      }));
+    }
+    for (const button of groupBar.children) button.setAttribute("aria-pressed", String(button.value === activeGroup));
+    for (const [id, field, label] of radarFilters) {
+      const select = $(id), previous = select.value;
+      const values = [...new Set(records.map(row => row[field]).filter(Boolean))].sort();
+      if (values.length !== select.options.length - 1 ||
+          values.some((value, index) => select.options[index+1]?.value !== value)) {
+        select.replaceChildren(new Option(label, ""), ...values.map(value => new Option(value, value)));
+        if (values.includes(previous)) select.value = previous;
+      }
+    }
+    const search = $("radar-search").value.trim().toLocaleLowerCase();
     const region = $("radar-region"), previous = region.value;
     const routes = new Map(records.map(row => [row.route_id, row.route_title]));
     if (routes.size !== region.options.length - 1 ||
@@ -137,6 +176,9 @@ window.skynetRadar = (() => {
     }
     const kind = $("radar-kind").value;
     const filtered = records.filter(row => (!region.value || region.value === row.route_id) && (!kind || kind === row.kind) &&
+      (!activeGroup || row.clan_groups?.includes(activeGroup)) &&
+      radarFilters.every(([id, field]) => !$(id).value || $(id).value === row[field]) &&
+      (!search || row.name.toLocaleLowerCase().includes(search)) &&
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
@@ -145,7 +187,7 @@ window.skynetRadar = (() => {
       const badge = document.createElement("span"), info = document.createElement("small");
       name.textContent = row.name;
       badge.textContent = row.kind === "boss" ? "BOSS" : "回報";
-      info.textContent = [row.route_title, row.server_name, row.map_name, row.location,
+      info.textContent = [row.route_title, row.clan_name, row.server_name, row.map_name, row.location,
         row.x !== null && row.y !== null ? `X ${row.x} / Y ${row.y}` : "",
         clock.format(new Date(row.occurred_at))].filter(Boolean).join(" · ");
       li.append(name, badge, info);
@@ -178,7 +220,7 @@ window.skynetRadar = (() => {
     let delay = 5000;
     try {
       const query = new URLSearchParams({
-        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py",
+        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups",
         order:after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc", limit:"100"
       });
       if (after) query.set("or", `(created_at.gt.${after.created_at},and(created_at.eq.${after.created_at},id.gt.${after.id}),and(created_at.eq.${after.created_at},id.eq.${after.id},user_id.gt.${after.user_id}))`);
@@ -245,6 +287,8 @@ window.skynetRadar = (() => {
   $("radar-refresh").addEventListener("click", refreshRadar);
   $("radar-region").addEventListener("change", () => {closeMap(); render();});
   $("radar-kind").addEventListener("change", () => {closeMap(); render();});
+  for (const [id] of radarFilters) $(id).addEventListener("change", () => {closeMap(); render();});
+  $("radar-search").addEventListener("input", render);
   $("radar-map-close").addEventListener("click", () => {closeMap(); render();});
   $("radar-select").addEventListener("click", () => {
     if (!image) return;

@@ -15,12 +15,12 @@ function validateProject(url,key) {
   if (!valid) throw new Error("請使用 publishable／anon key，不能使用 secret／service_role key。");
   return {url,key};
 }
-async function api(session,path,data=null,access="") {
+async function api(session,path,data=null,access="",method=data===null?"GET":"POST") {
   const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),12000);
   const headers={apikey:session.key,"Content-Type":"application/json"};
   if (access) headers.Authorization="Bearer "+access;
   try {
-    const response=await fetch(session.url+path,{method:data===null?"GET":"POST",headers,
+    const response=await fetch(session.url+path,{method,headers,
       body:data===null?null:JSON.stringify(data),signal:controller.signal,redirect:"error",credentials:"omit",cache:"no-store"});
     if (!response.ok) throw Object.assign(new Error("HTTP "+response.status),{status:response.status});
     return response.status===204 ? null : await response.json();
@@ -57,11 +57,52 @@ function resetView() {
 function endSession(message="已登出。") {
   ++generation;const old=active;active=null;clearTimeout(timer);refreshFlight=null;resetView();
   $("auth").hidden=false;$("feed").hidden=$("logout").hidden=true;$("password").value="";
+  $("password-change").hidden=true;
+  $("password-change-form").reset();
   try {localStorage.removeItem(storageKey);sessionStorage.removeItem(storageKey);} catch {}
   status(message);
   return old;
 }
 function showFeed() {$("auth").hidden=true;$("feed").hidden=$("logout").hidden=false;window.skynetRadar?.show();}
+async function openSession(session, user) {
+  if (active!==session) return;
+  if (user.app_metadata?.skynet_initial_password === true) {
+    $("auth").hidden=$("feed").hidden=true;
+    $("logout").hidden=$("password-change").hidden=false;
+    status("請更換管理員提供的初始密碼。");
+    $("new-password").focus();
+    return;
+  }
+  $("password-change").hidden=true;
+  showFeed();
+  await refresh();
+}
+$("password-change-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const session=active, button=$("save-password"), password=$("new-password").value;
+  if (!session || button.disabled) return;
+  if (password!==$("confirm-password").value || [...password].length<12 ||
+      new TextEncoder().encode(password).length>72) {
+    status("請確認兩次密碼一致，至少 12 個字元且最多 72 位元組。",true);
+    return;
+  }
+  button.disabled=true;
+  try {
+    const user=await api(session,"/auth/v1/user",{password},await token(session),"PUT");
+    if (active!==session) return;
+    if (user.app_metadata?.skynet_initial_password===true) {
+      status("密碼已更新，但資料庫尚未解除首次登入限制，請聯絡管理員。",true);
+      return;
+    }
+    const old=endSession("密碼已更新，請使用新密碼登入。");
+    if (old?.access) api(old,"/auth/v1/logout?scope=local",{},old.access).catch(()=>{});
+  } catch (error) {
+    if (active===session) status(error.status===422
+      ?"請使用與初始密碼不同、符合專案規則的新密碼。":"無法更換密碼，請重新登入後再試。",true);
+  } finally {
+    button.disabled=false;
+  }
+});
 function render() {
   const device=$("device").value, query=$("search").value.trim().toLocaleLowerCase();
   const filtered=rows.filter(row=>(!device||row.device===device)&&(!query||row.name.toLocaleLowerCase().includes(query)));
@@ -127,7 +168,7 @@ $("login-form").addEventListener("submit",async event=>{
     resetView();active={...project,owner:result.user.id,refresh:result.refresh_token,access:result.access_token,
       expires:Date.now()+Number(result.expires_in||3600)*1000,remember:$("remember").checked};
     persist(active);try {localStorage.setItem(configKey,JSON.stringify(project));} catch {}
-    $("password").value="";showFeed();status("登入成功，正在讀取紀錄…");await refresh();
+    $("password").value="";await openSession(active,result.user);
   } catch(error) {
     if (nonce===generation) status(error.status?`登入失敗（HTTP ${error.status}），請核對專案與看板帳號密碼，並確認使用者已確認 Email。`:
       error.name==="AbortError"?"登入連線超過 12 秒，請確認網路與 Supabase 專案是否已啟用。":
@@ -140,7 +181,7 @@ $("refresh").addEventListener("click",refresh);$("device").addEventListener("cha
 document.addEventListener("visibilitychange",()=>{clearTimeout(timer);if(!document.hidden) refresh();});
 window.addEventListener("pagehide",()=>clearTimeout(timer));
 window.addEventListener("pageshow",()=>{if(active&&!document.hidden)refresh();});
-(function restore(){
+(async function restore(){
   status("登入程式已就緒，請輸入看板 Email 與密碼。");
   let project=window.SKYNET_PUBLIC_CONFIG||{};
   try {if(!project.url) project=JSON.parse(localStorage.getItem(configKey)||"{}");} catch {}
@@ -156,6 +197,9 @@ window.addEventListener("pageshow",()=>{if(active&&!document.hidden)refresh();})
     validateProject(saved.url,saved.key);
     if(!saved.owner||!saved.refresh) return;
     if(project.url&&project.url!==saved.url) {localStorage.removeItem(storageKey);sessionStorage.removeItem(storageKey);return;}
-    active={...saved,access:"",expires:0};$("remember").checked=Boolean(saved.remember);showFeed();refresh();
-  } catch {endSession("請重新登入。");}
+    active={...saved,access:"",expires:0};$("remember").checked=Boolean(saved.remember);
+    const session=active;
+    const user=await api(session,"/auth/v1/user",null,await token(session));
+    await openSession(session,user);
+  } catch {if (!generation) endSession("請重新登入。");}
 })();
