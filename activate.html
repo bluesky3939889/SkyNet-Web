@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>啟用 SkyNet 帳號</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="config.js"></script>
+  <script defer src="activate.js"></script>
+</head>
+<body>
+  <main>
+    <h1>啟用 SkyNet 帳號</h1>
+    <p id="status" role="status"></p>
+    <form id="activate" hidden>
+      <label for="password">設定密碼（至少 8 個字元）</label>
+      <input id="password" type="password" minlength="8" autocomplete="new-password" required>
+      <button type="submit">設定密碼</button>
+    </form>
+    <p><a href="./">返回網頁登入</a></p>
+  </main>
+</body>
+</html>
