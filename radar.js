@@ -47,6 +47,48 @@ window.skynetRadar = (() => {
   const savePreference = (key, value) => {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
   };
+  const favoriteKey = "skynet-radar-map-favorites";
+  const savedFavorites = readPreference(favoriteKey, []);
+  const favorites = new Set(Array.isArray(savedFavorites) ? savedFavorites : []);
+  const mapNames = $("radar-map-names");
+  const mapFollow = $("radar-map-follow");
+  mapNames.checked = readPreference("skynet-radar-map-names", true);
+  mapFollow.checked = readPreference("skynet-radar-map-follow", true);
+  mapNames.addEventListener("change", () => {
+    savePreference("skynet-radar-map-names", mapNames.checked);
+    drawMap(false);
+  });
+  mapFollow.addEventListener("change", () => {
+    savePreference("skynet-radar-map-follow", mapFollow.checked);
+    render();
+  });
+  $("radar-map-favorite").addEventListener("click", () => {
+    if (!selected) return;
+    const name = selected.map_name || selected.map_asset;
+    if (!favorites.delete(name)) favorites.add(name);
+    savePreference(favoriteKey, [...favorites]);
+    render();
+  });
+  $("radar-map-fit").addEventListener("click", () => { zoom = 1; drawMap(false); viewport.scrollTo(0,0); });
+  canvas.addEventListener("dblclick", () => { if (mode === "map" && !selecting) $("radar-map-fit").click(); });
+  canvas.addEventListener("wheel", event => {
+    if (mode !== "map" || !image) return;
+    event.preventDefault();
+    zoom = Math.min(5, Math.max(1, zoom * (event.deltaY < 0 ? 1.2 : 1/1.2)));
+    drawMap(false);
+  }, {passive:false});
+  let pan = null;
+  canvas.addEventListener("pointerdown", event => {
+    if (mode !== "map" || selecting || !image || !event.isPrimary || event.button !== 0) return;
+    pan = [event.clientX, event.clientY, viewport.scrollLeft, viewport.scrollTop];
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("pointermove", event => {
+    if (pan && event.isPrimary) viewport.scrollTo(pan[2]+pan[0]-event.clientX, pan[3]+pan[1]-event.clientY);
+  });
+  for (const event of ["pointerup","pointercancel","lostpointercapture"]) {
+    canvas.addEventListener(event, () => { pan = null; });
+  }
   const orderKey = "skynet-radar-mode-order";
   const savedOrder = readPreference(orderKey, []);
   const modeOrder = [...new Set([...(Array.isArray(savedOrder) ? savedOrder : []), ...modes.keys()])]
@@ -69,6 +111,8 @@ window.skynetRadar = (() => {
   function renderModes() {
     $("radar-heading").textContent = modes.get(mode);
     $("radar-kind").hidden = $("radar-kind-label").hidden = mode !== "map";
+    $("radar-map-close").hidden = mode === "map";
+    $("radar-columns").parentElement?.toggleAttribute("hidden", Boolean(modeColumns[mode]));
     $("radar-modes").replaceChildren(...modeOrder.map(id => {
       const button = buttonFor(modes.get(id), () => {
         mode = id;
@@ -109,12 +153,12 @@ window.skynetRadar = (() => {
     $("radar-group-name").value = group;
     const clans = groupOverrides.get(group) ?? records
       .filter(row => row.clan_groups?.includes(group)).map(row => row.clan_name).filter(Boolean);
-    $("radar-group-clans").value = [...new Set(clans)].join("\n");
+    $("radar-group-clans").value = [...new Set(clans)].join(",");
   }
   function saveGroup(remove) {
     const group = $("radar-group-name").value.trim();
     if (!group) return;
-    const clans = [...new Set($("radar-group-clans").value.split(/\r?\n/).map(name => name.trim()).filter(Boolean))];
+    const clans = [...new Set($("radar-group-clans").value.split(/[,，\r\n]+/).map(name => name.trim()).filter(Boolean))];
     groupOverrides.set(group, remove ? null : clans);
     savePreference(groupKey, [...groupOverrides]);
     if (remove && activeGroup === group) activeGroup = "";
@@ -147,6 +191,33 @@ window.skynetRadar = (() => {
   const reportClock = new Intl.DateTimeFormat("zh-TW", {
     timeZone: "Asia/Taipei", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
+  const eventTime = row => reportClock.format(new Date(row.occurred_at));
+  const coordinates = values => Array.isArray(values) ? values.join(" / ") : "";
+  const detailsFor = row => row.details || {};
+  const modeColumns = {
+    boss: [
+      ["發現時間", eventTime], ["BOSS 中文名稱", row => row.name], ["伺服器", row => row.server_name],
+      ["地圖", row => row.map_name], ["大概位置", row => row.location], ["出王時段", row => detailsFor(row).period],
+      ["位置狀態", row => Number.isFinite(detailsFor(row).until) ? (Date.now()/1000 <= row.details.until ? "發現時位置" : "已過期") : ""],
+      ["通報來源", row => detailsFor(row).reporters], ["地圖操作", mapButton],
+    ],
+    phase: [
+      ["首次回報", eventTime], ["BOSS", row => row.name], ["階段", row => row.location],
+      ["事件所在地圖", row => row.map_name], ["規則分區", row => row.route_title],
+      ["來源數", row => detailsFor(row).count], ["通報來源", row => detailsFor(row).reporters],
+      ["紀錄狀態", row => detailsFor(row).state],
+    ],
+    banner: [
+      ["觀測時間", row => detailsFor(row).first_at ? reportClock.format(new Date(row.details.first_at*1000)) : eventTime(row)],
+      ["BOSS", row => row.name], ["樓層", row => row.map_name],
+      ["有效／收到（自身）", row => Number.isFinite(detailsFor(row).count)
+        ? `${row.details.count}／${row.details.received}（自身 ${row.details.self_count}）` : ""],
+      ["候選／參考中心", row => coordinates(detailsFor(row).center)],
+      ["範圍", row => coordinates(detailsFor(row).bounds)],
+      ["判斷", row => detailsFor(row).state || row.location],
+      ["通報來源", row => detailsFor(row).reporters], ["參考區地圖", mapButton],
+    ],
+  };
   const columnStorageKey = "skynet-radar-hidden-columns";
   const hiddenColumns = new Set();
   try {
@@ -216,11 +287,19 @@ window.skynetRadar = (() => {
       ctx.fillText(region.name, px * canvas.width + 3, py * canvas.height + 15);
     }
     if (mode === "map") for (const row of mapRows) {
-      if (row.map_asset !== selected.map_asset || !withinHour(row) || row.id === selected.id) continue;
+      if (row.map_asset !== selected.map_asset || !withinHour(row)) continue;
+      const px = row.map_px * canvas.width, py = row.map_py * canvas.height;
       ctx.beginPath();
-      ctx.arc(row.map_px * canvas.width, row.map_py * canvas.height, 5, 0, Math.PI * 2);
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
       ctx.fillStyle = markerColors[ageBracket(row)];
       ctx.fill();
+      if (mapNames.checked) {
+        ctx.font = "14px sans-serif";
+        ctx.strokeStyle = "#101820";
+        ctx.lineWidth = 3;
+        ctx.strokeText(row.nickname || row.name, px + 8, py - 6);
+        ctx.fillText(row.nickname || row.name, px + 8, py - 6);
+      }
     }
     ctx.beginPath();
     ctx.arc(x, y, 13, 0, Math.PI * 2);
@@ -255,6 +334,7 @@ window.skynetRadar = (() => {
     $("radar-map-title").textContent = row.map_name || "回報位置";
     $("radar-map-detail").textContent = [row.name, row.location, "載入地圖…"].filter(Boolean).join(" · ");
     $("radar-map").hidden = false;
+    $("radar-map-controls").hidden = mode !== "map";
     $("radar-map").scrollIntoView({block:"nearest"});
     const next = new Image();
     next.onload = () => {
@@ -365,12 +445,28 @@ window.skynetRadar = (() => {
       mapChoice.value = maps.has(mapId) ? mapId : "";
     }
     if (mode === "map" && selected && !maps.has(selected.map_asset)) closeMap();
+    if (mode === "map" && !selected && mapFollow.checked && mapRows.length) {
+      const row = mapRows.find(item => item.map_asset === mapChoice.value) || mapRows[0];
+      mapChoice.value = row.map_asset;
+      showMap(row);
+    }
+    const favoriteBar = $("radar-map-favorites");
+    const favoriteMaps = [...maps].filter(([id, name]) => favorites.has(name) || favorites.has(id));
+    favoriteBar.hidden = mode !== "map" || !favoriteMaps.length;
+    favoriteBar.replaceChildren(...favoriteMaps.map(([id, name]) => buttonFor(name, () => {
+      mapChoice.value = id;
+      showMap(mapRows.find(row => row.map_asset === id));
+      render();
+    })));
+    $("radar-map-favorite").textContent = selected && favorites.has(selected.map_name || selected.map_asset)
+      ? "移出最愛" : "加入最愛";
     if (mode === "map" && image) drawMap(false);
     const filtered = matching.filter(row => (!mapChoice.value || mode !== "map" || row.map_asset === mapChoice.value) &&
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
-    const visible = columns.filter(([key]) => !hiddenColumns.has(key) || (mode === "map" && key === "action"));
+    const visible = modeColumns[mode]?.map(([title, value]) => ["", title, value]) ??
+      columns.filter(([key]) => !hiddenColumns.has(key) || (mode === "map" && key === "action"));
     $("radar-empty").hidden = filtered.length > 0;
     $("radar-head").replaceChildren(...visible.map(([, title]) => {
       const th = document.createElement("th");
@@ -385,7 +481,7 @@ window.skynetRadar = (() => {
         const cell = document.createElement("td");
         const value = valueFor(row);
         if (typeof value === "object" && value) cell.append(value);
-        else cell.textContent = value || "—";
+        else cell.textContent = value === "" || value == null ? "—" : String(value);
         tr.append(cell);
       }
       return tr;
@@ -421,7 +517,7 @@ window.skynetRadar = (() => {
     let delay = 5000;
     try {
       const query = new URLSearchParams({
-        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups,nickname,map_regions",
+        select:"id,user_id,occurred_at,created_at,kind,name,route_id,route_title,map_name,server_name,location,x,y,map_asset,map_px,map_py,clan_name,clan_groups,nickname,map_regions,details",
         occurred_at:"gte."+new Date(Date.now()-3600000).toISOString(),
         order:after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc", limit:"100"
       });
@@ -453,11 +549,14 @@ window.skynetRadar = (() => {
         const incremental = Boolean(after);
         after = incremental ? result.at(-1) : result[0];
         if (incremental && result.length === 100) delay = 250;
-        const combined = new Map(records.map(row => [row.id,row]));
+        const keyFor = row => row.details?.event_key
+          ? JSON.stringify([row.kind,row.user_id,row.details.event_key]) : row.id;
+        const combined = new Map(records.map(row => [keyFor(row),row]));
         for (const row of result) {
-          const previous = combined.get(row.id);
+          const key = keyFor(row);
+          const previous = combined.get(key);
           if (!previous || row.created_at > previous.created_at ||
-              (row.created_at === previous.created_at && row.user_id > previous.user_id)) combined.set(row.id,row);
+              (row.created_at === previous.created_at && row.user_id > previous.user_id)) combined.set(key,row);
         }
         records = [...combined.values()].sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)).slice(0,100);
       }

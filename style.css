@@ -32,3 +32,5 @@ main:has(#radar-feed:not([hidden])) { max-width: 96rem; }
 #radar-feed [data-age="30"] { --age-color: #a5d86a; }
 #radar-map-picker { display: flex; gap: .6rem; align-items: center; max-width: 28rem; }
 #radar-map-picker label { white-space: nowrap; }
+#radar-map-controls label { display: inline-flex; align-items: center; gap: .35rem; }
+#radar-map-controls input { width: 1rem; height: 1rem; min-height: 0; }
