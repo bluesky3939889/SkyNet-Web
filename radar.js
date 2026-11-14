@@ -65,20 +65,37 @@ window.skynetRadar = (() => {
   const savedFavorites = readPreference(favoriteKey, []);
   const favorites = new Set(Array.isArray(savedFavorites) ? savedFavorites : []);
   const hiddenMapsKey = "skynet-radar-hidden-maps";
+  const defaultHiddenMaps = [
+    "暗影神殿4樓", "暗影神殿3樓", "暗影神殿2樓", "暗影神殿1樓", "亞丁大陸",
+    "古代精靈墓穴", "黑暗修練地監3樓", "黑暗修練地監2樓", "黑暗修練地監1樓", "孤立的無界擂台",
+    "說話之島地監2樓(地獄)", "說話之島地監2樓(困難)", "說話之島地監2樓(一般)", "未知之地",
+    "寶物島釣魚場", "夢幻之島", "艾歐丁城堡入口", "追隨者(一般)", "競技場", "拋棄之地",
+    "妖精森林防衛戰", "守護者的據點港口", "沉默洞穴", "傲慢與信念之塔入口", "海賊島村莊",
+    "渾沌的巨蟻洞穴野營區", "變成廢墟的神殿", "悲傷洞穴", "奇岩釣魚場", "古代巨人墓穴",
+    "遺忘之島等待村莊", "異界裂縫",
+  ];
+  $("radar-default-hidden-maps").textContent = defaultHiddenMaps.join(", ");
   const savedHiddenMaps = readPreference(hiddenMapsKey, []);
   const hiddenMapsInput = $("radar-hidden-maps");
   hiddenMapsInput.value = Array.isArray(savedHiddenMaps) ? savedHiddenMaps.join(",") : "";
   const mapNameKey = name => (name || "").trim().normalize("NFC").toLocaleLowerCase();
-  let hiddenMaps = new Set(hiddenMapsInput.value.split(",").filter(Boolean).map(mapNameKey));
+  const defaultHiddenKeys = new Set(defaultHiddenMaps.map(mapNameKey));
+  let hiddenMaps = new Set([...defaultHiddenKeys, ...hiddenMapsInput.value.split(",").map(mapNameKey)]);
+  hiddenMaps.delete("");
   $("radar-hidden-maps-form").addEventListener("submit", event => {
     event.preventDefault();
-    const names = [...new Set(hiddenMapsInput.value.split(/[,，]+/).map(name => name.trim()).filter(Boolean))];
+    const namesByKey = new Map();
+    for (const value of hiddenMapsInput.value.split(/[,，]+/)) {
+      const name = value.trim(), key = mapNameKey(name);
+      if (key && !defaultHiddenKeys.has(key)) namesByKey.set(key, name);
+    }
+    const names = [...namesByKey.values()];
     hiddenMapsInput.value = names.join(",");
-    hiddenMaps = new Set(names.map(mapNameKey));
+    hiddenMaps = new Set([...defaultHiddenKeys, ...namesByKey.keys()]);
     savePreference(hiddenMapsKey, names);
     const status = $("radar-hidden-maps-status");
     status.hidden = false;
-    status.textContent = names.length ? `已隱藏 ${names.length} 張地圖。` : "已清除隱藏地圖設定。";
+    status.textContent = names.length ? `已新增 ${names.length} 張個人排除地圖。` : "目前使用共用預設排除清單。";
     render();
   });
   const mapNames = $("radar-map-names");
@@ -429,8 +446,9 @@ window.skynetRadar = (() => {
   function render() {
     records = records.filter(withinHour);
     if (selected && !withinHour(selected)) closeMap();
+    const visibleRecords = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)));
     const groupBar = $("radar-groups");
-    const groups = [...new Set([...records.flatMap(groupsFor),
+    const groups = [...new Set([...visibleRecords.flatMap(groupsFor),
       ...[...groupOverrides].filter(([, clans]) => clans !== null).map(([name]) => name)])].sort();
     if (activeGroup && !groups.includes(activeGroup)) activeGroup = "";
     groupBar.hidden = !groups.length;
@@ -449,7 +467,7 @@ window.skynetRadar = (() => {
     for (const button of groupBar.children) button.setAttribute("aria-pressed", String(button.value === activeGroup));
     for (const [id, field, label] of radarFilters) {
       const select = $(id), previous = select.value;
-      const values = [...new Set(records.map(row => row[field]).filter(Boolean))].sort();
+      const values = [...new Set(visibleRecords.map(row => row[field]).filter(Boolean))].sort();
       if (values.length !== select.options.length - 1 ||
           values.some((value, index) => select.options[index+1]?.value !== value)) {
         select.replaceChildren(new Option(label, ""), ...values.map(value => new Option(value, value)));
@@ -458,7 +476,7 @@ window.skynetRadar = (() => {
     }
     const search = $("radar-search").value.trim().toLocaleLowerCase();
     const region = $("radar-region"), previous = region.value;
-    const routes = new Map(records.map(row => [row.route_id, row.route_title]));
+    const routes = new Map(visibleRecords.map(row => [row.route_id, row.route_title]));
     if (routes.size !== region.options.length - 1 ||
         [...region.options].slice(1).some(option => routes.get(option.value) !== option.textContent)) {
       region.replaceChildren(new Option("全部分區", ""), ...[...routes].map(([id, name]) => new Option(name, id)));
@@ -466,7 +484,7 @@ window.skynetRadar = (() => {
     }
     const kind = $("radar-kind").value;
     if (selected && hiddenMaps.has(mapNameKey(selected.map_name))) closeMap();
-    const matching = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)) &&
+    const matching = visibleRecords.filter(row =>
       (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") &&
       [row.map_px,row.map_py].every(Number.isFinite) :
       mode === "phase" ? row.kind === "phase" || (row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)) :

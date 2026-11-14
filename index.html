@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="theme-color" content="#101820"><title>SkyNet</title>
 <link rel="icon" type="image/png" href="skynet-icon.png">
-<link rel="stylesheet" href="style.css?v=radar-mobile-fit"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-mobile-fit" defer></script>
+<link rel="stylesheet" href="style.css?v=radar-map-defaults"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-map-defaults" defer></script>
 </head><body><main>
 <header><img src="skynet-icon.png" alt="" width="40" height="40"><h1>SkyNet</h1><button id="logout" class="secondary" hidden>登出</button></header>
 <p id="status" role="status" aria-live="polite">正在載入登入程式；若長時間停留，請重新整理網頁。</p>
@@ -29,8 +29,9 @@
 <div class="toolbar"><h2 id="radar-heading">雷達回報</h2><button id="radar-refresh" class="secondary" type="button">立即更新</button></div>
 <nav id="radar-modes" class="board-tabs" aria-label="雷達功能"></nav>
 <details id="radar-hidden-maps-settings"><summary>不顯示地圖設定</summary>
+<details><summary>查看共用預設排除清單</summary><p id="radar-default-hidden-maps"></p></details>
 <form id="radar-hidden-maps-form">
-<label for="radar-hidden-maps">地圖名稱（逗號分隔）</label>
+<label for="radar-hidden-maps">個人追加排除（逗號分隔）</label>
 <input id="radar-hidden-maps" placeholder="名稱,名稱2,名稱3">
 <button type="submit">儲存</button>
 <p id="radar-hidden-maps-status" role="status" hidden></p>
