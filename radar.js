@@ -30,11 +30,25 @@ window.skynetRadar = (() => {
   ) || 60;
   const markerColors = {1:"#ff6674",5:"#ffab54",10:"#ffdf55",30:"#a5d86a",60:"#d0d0d0"};
   const mapChoice = $("radar-map-choice");
+  const mapSearch = $("radar-map-search");
+  const favoriteChoice = $("radar-map-favorites");
   let mapRows = [];
+  mapSearch.addEventListener("input", render);
   mapChoice.addEventListener("change", () => {
     const row = mapRows.find(item => item.map_asset === mapChoice.value);
-    if (row) showMap(row);
+    if (row) {
+      $("radar-map-menu").open = false;
+      showMap(row);
+    }
     else closeMap();
+    render();
+  });
+  favoriteChoice.addEventListener("change", () => {
+    const row = mapRows.find(item => item.map_asset === favoriteChoice.value);
+    if (!row) return;
+    $("radar-map-favorite-menu").open = false;
+    mapSearch.value = "";
+    showMap(row);
     render();
   });
   const modes = new Map([
@@ -263,8 +277,10 @@ window.skynetRadar = (() => {
 
   function drawMap(center = true) {
     if (!image || !selected) return;
-    canvas.width = Math.max(1, Math.round(viewport.clientWidth * zoom));
-    canvas.height = Math.max(1, Math.round(canvas.width * image.naturalHeight / image.naturalWidth));
+    const scale = Math.min(viewport.clientWidth / image.naturalWidth,
+      viewport.clientHeight / image.naturalHeight) * zoom;
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const ctx = canvas.getContext("2d");
     const x = selected.map_px * canvas.width, y = selected.map_py * canvas.height;
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -330,10 +346,11 @@ window.skynetRadar = (() => {
     image = null;
     canvas.width = canvas.height = 0;
     selected = row;
-    zoom = 1.5;
+    zoom = 1;
     $("radar-map-title").textContent = row.map_name || "回報位置";
     $("radar-map-detail").textContent = [row.name, row.location, "載入地圖…"].filter(Boolean).join(" · ");
     $("radar-map").hidden = false;
+    viewport.hidden = false;
     $("radar-map-controls").hidden = mode !== "map";
     $("radar-map").scrollIntoView({block:"nearest"});
     const next = new Image();
@@ -438,30 +455,37 @@ window.skynetRadar = (() => {
     mapRows = mode === "map" ? matching : [];
     $("radar-map-picker").hidden = mode !== "map";
     const maps = new Map(mapRows.map(row => [row.map_asset, row.map_name || "未命名地圖"]));
-    const mapId = mapChoice.value;
-    if (maps.size !== mapChoice.options.length - 1 ||
-        [...mapChoice.options].slice(1).some(option => maps.get(option.value) !== option.textContent)) {
-      mapChoice.replaceChildren(new Option("請選擇地圖", ""), ...[...maps].map(([id, name]) => new Option(name, id)));
-      mapChoice.value = maps.has(mapId) ? mapId : "";
+    const mapId = selected?.map_asset || "";
+    const query = mapSearch.value.trim().toLocaleLowerCase();
+    const results = [...maps].filter(([, name]) => name.toLocaleLowerCase().includes(query));
+    if (results.length !== mapChoice.options.length - 1 ||
+        results.some(([id, name], index) => mapChoice.options[index+1]?.value !== id ||
+          mapChoice.options[index+1]?.textContent !== name)) {
+      mapChoice.replaceChildren(new Option(results.length ? "請選擇地圖" : "沒有符合的地圖", ""),
+        ...results.map(([id, name]) => new Option(name, id)));
     }
+    mapChoice.value = results.some(([id]) => id === mapId) ? mapId : "";
     if (mode === "map" && selected && !maps.has(selected.map_asset)) closeMap();
     if (mode === "map" && !selected && mapFollow.checked && mapRows.length) {
       const row = mapRows.find(item => item.map_asset === mapChoice.value) || mapRows[0];
       mapChoice.value = row.map_asset;
       showMap(row);
     }
-    const favoriteBar = $("radar-map-favorites");
     const favoriteMaps = [...maps].filter(([id, name]) => favorites.has(name) || favorites.has(id));
-    favoriteBar.hidden = mode !== "map" || !favoriteMaps.length;
-    favoriteBar.replaceChildren(...favoriteMaps.map(([id, name]) => buttonFor(name, () => {
-      mapChoice.value = id;
-      showMap(mapRows.find(row => row.map_asset === id));
-      render();
-    })));
+    favoriteChoice.replaceChildren(new Option(favoriteMaps.length ? "請選擇最愛地圖" : "目前沒有可開啟的最愛地圖", ""),
+      ...favoriteMaps.map(([id, name]) => new Option(name, id)));
+    favoriteChoice.value = "";
+    if (mode === "map") {
+      $("radar-map").hidden = false;
+      viewport.hidden = !selected;
+      $("radar-map-controls").hidden = !selected;
+      if (!selected) $("radar-map-detail").textContent = maps.size ? "請選擇地圖。" : "目前沒有可顯示的地圖。";
+    }
+    $("radar-map-favorite").disabled = !selected;
     $("radar-map-favorite").textContent = selected && favorites.has(selected.map_name || selected.map_asset)
       ? "移出最愛" : "加入最愛";
     if (mode === "map" && image) drawMap(false);
-    const filtered = matching.filter(row => (!mapChoice.value || mode !== "map" || row.map_asset === mapChoice.value) &&
+    const filtered = matching.filter(row => (!selected || mode !== "map" || row.map_asset === selected.map_asset) &&
       (!area || (row.map_asset === selected?.map_asset && Number.isFinite(row.map_px) && Number.isFinite(row.map_py) &&
         row.map_px >= area[0] && row.map_px <= area[2] && row.map_py >= area[1] && row.map_py <= area[3])));
     if (area) $("radar-area-status").textContent = `最近 100 筆中，框選範圍符合 ${filtered.length} 筆`;
@@ -614,6 +638,7 @@ window.skynetRadar = (() => {
   });
   window.addEventListener("pagehide", () => clearTimeout(poll));
   window.addEventListener("pageshow", refreshRadar);
+  window.addEventListener("resize", () => drawMap(false));
   function show() { opened = true; $("radar-feed").hidden = false; renderModes(); refreshRadar(); }
 
   return {show, reset};
