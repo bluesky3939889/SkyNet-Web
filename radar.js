@@ -294,8 +294,12 @@ window.skynetRadar = (() => {
 
   function drawMap(center = true) {
     if (!image || !selected) return;
+    const compact = window.matchMedia?.("(max-width: 640px)").matches;
+    // The mobile viewport shrinks to the canvas, so use its height limit
+    // rather than the current height when calculating the fitted image.
+    const heightLimit = compact ? parseFloat(window.getComputedStyle(viewport).maxHeight) : viewport.clientHeight;
     const scale = Math.min(viewport.clientWidth / image.naturalWidth,
-      viewport.clientHeight / image.naturalHeight) * zoom;
+      heightLimit / image.naturalHeight) * zoom;
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const ctx = canvas.getContext("2d");

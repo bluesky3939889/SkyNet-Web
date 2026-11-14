@@ -66,6 +66,6 @@ main:has(#radar-feed:not([hidden])) { max-width: 96rem; }
   .radar-table td[data-field="location"], .radar-table td[data-field="action"] { grid-column: 1 / -1; }
   .radar-table td button { min-height: 44px; width: 100%; }
   #radar-map { padding: .55rem; }
-  #radar-map-scroll { height: 62vh; height: 62dvh; }
+  #radar-map-scroll { height: auto; max-height: 62vh; max-height: 62dvh; }
   #radar-map .radar-map-toolbar button, #radar-map-picker summary, #radar-map-favorite-menu summary { min-height: 44px; }
 }
