@@ -45,3 +45,27 @@ main:has(#radar-feed:not([hidden])) { max-width: 96rem; }
 #radar-map-picker select { min-height: 0; }
 #radar-map-scroll { height: 75vh; max-height: none; }
 #radar-canvas { display: block; margin-inline: auto; }
+#radar-map-favorite-menu { position: relative; margin: 0; }
+#radar-map-favorite-menu summary { padding: .25rem .55rem; border: 1px solid #4e727e; border-radius: .45rem; white-space: nowrap; }
+#radar-map-favorite-menu[open] { width: min(14rem, 80vw); }
+#radar-map-favorite-menu select { margin: .3rem 0; }
+#radar-hidden-maps-form { max-width: 30rem; }
+#radar-hidden-maps-form button { justify-self: start; }
+
+@media (max-width: 640px) {
+  main:has(#radar-feed:not([hidden])) { padding: .65rem; }
+  #radar-modes { display: flex; flex-wrap: nowrap; overflow-x: auto; }
+  #radar-modes button { flex: 0 0 auto; white-space: nowrap; }
+  .radar-table-scroll { max-height: none; overflow: visible; border: 0; background: transparent; }
+  .radar-table, .radar-table tbody { display: block; }
+  .radar-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .radar-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .7rem; margin-bottom: .55rem; padding: .65rem; background: #192738; border: 1px solid #314550; border-radius: .6rem; }
+  .radar-table tr td { padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
+  .radar-table td::before { content: attr(data-label); display: block; color: #a5bdc9; font-size: .72rem; }
+  .radar-table td[data-field="name"] { order: -1; grid-column: 1 / -1; font-weight: 700; }
+  .radar-table td[data-field="location"], .radar-table td[data-field="action"] { grid-column: 1 / -1; }
+  .radar-table td button { min-height: 44px; width: 100%; }
+  #radar-map { padding: .55rem; }
+  #radar-map-scroll { height: 62vh; height: 62dvh; }
+  #radar-map .radar-map-toolbar button, #radar-map-picker summary, #radar-map-favorite-menu summary { min-height: 44px; }
+}

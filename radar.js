@@ -64,6 +64,23 @@ window.skynetRadar = (() => {
   const favoriteKey = "skynet-radar-map-favorites";
   const savedFavorites = readPreference(favoriteKey, []);
   const favorites = new Set(Array.isArray(savedFavorites) ? savedFavorites : []);
+  const hiddenMapsKey = "skynet-radar-hidden-maps";
+  const savedHiddenMaps = readPreference(hiddenMapsKey, []);
+  const hiddenMapsInput = $("radar-hidden-maps");
+  hiddenMapsInput.value = Array.isArray(savedHiddenMaps) ? savedHiddenMaps.join(",") : "";
+  const mapNameKey = name => (name || "").trim().normalize("NFC").toLocaleLowerCase();
+  let hiddenMaps = new Set(hiddenMapsInput.value.split(",").filter(Boolean).map(mapNameKey));
+  $("radar-hidden-maps-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const names = [...new Set(hiddenMapsInput.value.split(/[,，]+/).map(name => name.trim()).filter(Boolean))];
+    hiddenMapsInput.value = names.join(",");
+    hiddenMaps = new Set(names.map(mapNameKey));
+    savePreference(hiddenMapsKey, names);
+    const status = $("radar-hidden-maps-status");
+    status.hidden = false;
+    status.textContent = names.length ? `已隱藏 ${names.length} 張地圖。` : "已清除隱藏地圖設定。";
+    render();
+  });
   const mapNames = $("radar-map-names");
   const mapFollow = $("radar-map-follow");
   mapNames.checked = readPreference("skynet-radar-map-names", true);
@@ -444,7 +461,9 @@ window.skynetRadar = (() => {
       if (routes.has(previous)) region.value = previous;
     }
     const kind = $("radar-kind").value;
-    const matching = records.filter(row => (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") &&
+    if (selected && hiddenMaps.has(mapNameKey(selected.map_name))) closeMap();
+    const matching = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)) &&
+      (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") &&
       [row.map_px,row.map_py].every(Number.isFinite) :
       mode === "phase" ? row.kind === "phase" || (row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)) :
       row.kind === mode && !(mode === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location))) &&
@@ -454,6 +473,7 @@ window.skynetRadar = (() => {
       (!search || [row.name, row.nickname].some(name => name?.toLocaleLowerCase().includes(search))));
     mapRows = mode === "map" ? matching : [];
     $("radar-map-picker").hidden = mode !== "map";
+    $("radar-map-favorite-menu").hidden = mode !== "map";
     const maps = new Map(mapRows.map(row => [row.map_asset, row.map_name || "未命名地圖"]));
     const mapId = selected?.map_asset || "";
     const query = mapSearch.value.trim().toLocaleLowerCase();
@@ -501,8 +521,10 @@ window.skynetRadar = (() => {
     $("radar-rows").replaceChildren(...filtered.map(row => {
       const tr = document.createElement("tr");
       tr.dataset.age = ageBracket(row);
-      for (const [, , valueFor] of visible) {
+      for (const [key, title, valueFor] of visible) {
         const cell = document.createElement("td");
+        cell.dataset.label = title;
+        cell.dataset.field = key;
         const value = valueFor(row);
         if (typeof value === "object" && value) cell.append(value);
         else cell.textContent = value === "" || value == null ? "—" : String(value);

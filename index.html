@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="theme-color" content="#101820"><title>SkyNet</title>
 <link rel="icon" type="image/png" href="skynet-icon.png">
-<link rel="stylesheet" href="style.css?v=radar-map-toolbar"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-map-toolbar" defer></script>
+<link rel="stylesheet" href="style.css?v=radar-mobile-maps"><script src="config.js?v=7.0.0" defer></script><script src="board.js?v=radar-compact" defer></script><script src="radar.js?v=radar-mobile-maps" defer></script>
 </head><body><main>
 <header><img src="skynet-icon.png" alt="" width="40" height="40"><h1>SkyNet</h1><button id="logout" class="secondary" hidden>登出</button></header>
 <p id="status" role="status" aria-live="polite">正在載入登入程式；若長時間停留，請重新整理網頁。</p>
@@ -28,6 +28,13 @@
 <section id="radar-feed" hidden>
 <div class="toolbar"><h2 id="radar-heading">雷達回報</h2><button id="radar-refresh" class="secondary" type="button">立即更新</button></div>
 <nav id="radar-modes" class="board-tabs" aria-label="雷達功能"></nav>
+<details id="radar-hidden-maps-settings"><summary>不顯示地圖設定</summary>
+<form id="radar-hidden-maps-form">
+<label for="radar-hidden-maps">地圖名稱（逗號分隔）</label>
+<input id="radar-hidden-maps" placeholder="名稱,名稱2,名稱3">
+<button type="submit">儲存</button>
+<p id="radar-hidden-maps-status" role="status" hidden></p>
+</form></details>
 <details><summary>排列功能順序</summary><div id="radar-mode-order"></div></details>
 <div id="radar-groups" class="board-tabs" role="group" aria-label="血盟群組" hidden></div>
 <details><summary>管理血盟群組</summary>
@@ -56,11 +63,11 @@
 <label for="radar-map-search">搜尋地圖</label><input id="radar-map-search" type="search" placeholder="輸入地圖名稱">
 <select id="radar-map-choice" size="6" aria-label="搜尋結果"></select>
 </details>
-<details id="radar-map-favorite-menu"><summary>★ 最愛地圖</summary>
+</div>
+<details id="radar-map-favorite-menu" hidden><summary>★ 我的最愛地圖</summary>
 <select id="radar-map-favorites" size="5" aria-label="最愛地圖"></select>
 <button id="radar-map-favorite" type="button">加入最愛</button>
 </details>
-</div>
 <button id="radar-zoom-out" type="button" aria-label="縮小">−</button><button id="radar-zoom-in" type="button" aria-label="放大">＋</button><button id="radar-center" type="button">回到標記</button>
 <div id="radar-map-controls" hidden>
 <button id="radar-map-fit" type="button">符合視窗</button>
