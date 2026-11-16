@@ -144,6 +144,7 @@ window.skynetRadar = (() => {
   let mode = "report";
   let clanSnapshots = new Map();
   let allowedModes = new Set();
+  let allowedServers = new Set();
   let permissionKey = null;
   const buttonFor = (label, action) => {
     const button = document.createElement("button");
@@ -192,11 +193,23 @@ window.skynetRadar = (() => {
       return row;
     }));
   }
+  const numberedRegion = /(?:[0-9]+|[一二三四五六七八九十百〇零]+)區/g;
   function groupsFor(row) {
-    if (!clanSnapshots.has(row.user_id)) return row.clan_groups || [];
-    const clan = row.clan_name?.trim().toLocaleLowerCase();
-    return clan ? clanSnapshots.get(row.user_id).filter(group =>
-      group.clans.some(name => name.toLocaleLowerCase() === clan)).map(group => group.title) : [];
+    let groups = row.clan_groups || [];
+    if (clanSnapshots.has(row.user_id)) {
+      const clan = row.clan_name?.trim().toLocaleLowerCase();
+      groups = clan ? clanSnapshots.get(row.user_id).filter(group =>
+        group.clans.some(name => name.toLocaleLowerCase() === clan)).map(group => group.title) : [];
+    }
+    if (allowedServers === null) return groups;
+
+    // Numbered group names are also used as region labels (e.g. 七區 and 📡 七區看板).
+    // A clan can be listed in groups for several regions.
+    const rowRegions = (row.route_title || "").normalize("NFKC").match(numberedRegion) || [];
+    return groups.filter(title => {
+      const name = title.trim().normalize("NFKC");
+      return name.match(numberedRegion)?.[0] !== name || rowRegions.includes(name);
+    });
   }
   const modeFor = row => row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)
     ? "phase" : row.kind;
@@ -276,6 +289,7 @@ window.skynetRadar = (() => {
     mode = "report";
     clanSnapshots = new Map();
     allowedModes = new Set();
+    allowedServers = new Set();
     permissionKey = null;
     ++epoch;
     clearTimeout(poll);
@@ -431,12 +445,16 @@ window.skynetRadar = (() => {
   }
 
   function render() {
-    records = records.filter(withinHour);
+    records = records.filter(row => withinHour(row) &&
+      (allowedServers === null || allowedServers.has(row.server_name?.trim())));
     if (selected && !withinHour(selected)) closeMap();
     const visibleRecords = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)));
     const groupBar = $("radar-groups");
-    const groups = [...new Set([...visibleRecords.flatMap(groupsFor),
-      ...[...clanSnapshots.values()].flatMap(items => items.map(group => group.title))])].sort();
+    const groupTitles = new Set(visibleRecords.flatMap(groupsFor));
+    if (allowedServers === null) {
+      for (const items of clanSnapshots.values()) for (const group of items) groupTitles.add(group.title);
+    }
+    const groups = [...groupTitles].sort();
     if (activeGroup && !groups.includes(activeGroup)) activeGroup = "";
     groupBar.hidden = !groups.length;
     const groupOptions = ["", ...groups];
@@ -587,6 +605,7 @@ window.skynetRadar = (() => {
             records = [];
             after = null;
             allowedModes.clear();
+            allowedServers = new Set();
             clanSnapshots.clear();
             permissionKey = null;
             renderModes();
@@ -603,6 +622,7 @@ window.skynetRadar = (() => {
             after = null;
             closeMap();
             allowedModes = new Set(member.allowed_modes ?? modes.keys());
+            allowedServers = member.allowed_servers === null ? null : new Set(member.allowed_servers ?? []);
             renderModes();
           }
           query.set("order", after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc");
