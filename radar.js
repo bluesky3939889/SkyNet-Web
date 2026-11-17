@@ -196,22 +196,18 @@ window.skynetRadar = (() => {
   }
   const numberedRegion = /(?:[0-9]+|[一二三四五六七八九十百〇零]+)區/g;
   function groupsFor(row) {
-    let groups = row.clan_groups || [];
-    if (clanSnapshots.has(row.user_id)) {
-      const clan = row.clan_name?.trim().toLocaleLowerCase();
-      groups = clan ? clanSnapshots.get(row.user_id).filter(group =>
-        (!group.board_id || group.board_id === row.route_id) &&
-        group.clans.some(name => name.toLocaleLowerCase() === clan)).map(group => group.title) : [];
-    }
-    if (allowedServers === null) return groups;
-
-    // Numbered group names are also used as region labels (e.g. 七區 and 📡 七區看板).
-    // A clan can be listed in groups for several regions.
     const rowRegions = (row.route_title || "").normalize("NFKC").match(numberedRegion) || [];
-    return groups.filter(title => {
+    const matchesLegacyGroup = title => {
+      if (allowedServers === null) return true;
       const name = title.trim().normalize("NFKC");
       return name.match(numberedRegion)?.[0] !== name || rowRegions.includes(name);
-    });
+    };
+    if (!clanSnapshots.has(row.user_id)) return (row.clan_groups || []).filter(matchesLegacyGroup);
+    const clan = row.clan_name?.trim().toLocaleLowerCase();
+    if (!clan) return [];
+    return clanSnapshots.get(row.user_id).filter(group =>
+      (group.board_id ? group.board_id === row.route_id : matchesLegacyGroup(group.title)) &&
+      group.clans.some(name => name.toLocaleLowerCase() === clan)).map(group => group.title);
   }
   const modeFor = row => row.kind === "boss" && ["快滿預告","滿階觸發","週期重置"].includes(row.location)
     ? "phase" : row.kind;
@@ -473,8 +469,14 @@ window.skynetRadar = (() => {
     const boardRecords = region.value ? visibleRecords.filter(row => row.route_id === region.value) : visibleRecords;
     const groupBar = $("radar-groups");
     const groupTitles = new Set(boardRecords.flatMap(groupsFor));
-    if (allowedServers === null && boardScopes === null && !region.value) {
-      for (const items of clanSnapshots.values()) for (const group of items) groupTitles.add(group.title);
+    for (const items of clanSnapshots.values()) {
+      for (const group of items) {
+        if (group.board_id && routes.has(group.board_id) && (!region.value || region.value === group.board_id)) {
+          groupTitles.add(group.title);
+        } else if (!group.board_id && allowedServers === null && boardScopes === null && !region.value) {
+          groupTitles.add(group.title);
+        }
+      }
     }
     const groups = [...groupTitles].sort();
     if (activeGroup && !groups.includes(activeGroup)) activeGroup = "";
