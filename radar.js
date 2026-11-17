@@ -145,6 +145,7 @@ window.skynetRadar = (() => {
   let clanSnapshots = new Map();
   let allowedModes = new Set();
   let allowedServers = new Set();
+  let boardScopes = null;
   let permissionKey = null;
   const buttonFor = (label, action) => {
     const button = document.createElement("button");
@@ -199,6 +200,7 @@ window.skynetRadar = (() => {
     if (clanSnapshots.has(row.user_id)) {
       const clan = row.clan_name?.trim().toLocaleLowerCase();
       groups = clan ? clanSnapshots.get(row.user_id).filter(group =>
+        (!group.board_id || group.board_id === row.route_id) &&
         group.clans.some(name => name.toLocaleLowerCase() === clan)).map(group => group.title) : [];
     }
     if (allowedServers === null) return groups;
@@ -228,7 +230,7 @@ window.skynetRadar = (() => {
     ["server", "伺服器", row => row.server_name],
     ["map", "地圖", row => row.map_name],
     ["location", "大概位置", row => row.location],
-    ["route", "分區", row => row.route_title],
+    ["route", "來源看板", row => row.route_title],
     ["groups", "群組", row => groupsFor(row).join("、")],
     ["kind", "類型", row => modes.get(row.kind)],
     ["coordinates", "座標", row => Number.isFinite(row.x) && Number.isFinite(row.y) ? `X ${row.x} / Y ${row.y}` : ""],
@@ -290,6 +292,7 @@ window.skynetRadar = (() => {
     clanSnapshots = new Map();
     allowedModes = new Set();
     allowedServers = new Set();
+    boardScopes = null;
     permissionKey = null;
     ++epoch;
     clearTimeout(poll);
@@ -444,14 +447,33 @@ window.skynetRadar = (() => {
     return [clamp((event.clientX - bounds.left) / bounds.width), clamp((event.clientY - bounds.top) / bounds.height)];
   }
 
+  function canViewBoard(row) {
+    const server = row.server_name?.trim();
+    if (allowedServers !== null && !allowedServers.has(server)) return false;
+    if (boardScopes === null) return true;
+    const scope = Object.hasOwn(boardScopes, row.route_id) ? boardScopes[row.route_id] : null;
+    return scope?.servers?.includes(server) === true &&
+      (row.route_id !== "main" || scope.title === row.route_title?.trim());
+  }
+
   function render() {
-    records = records.filter(row => withinHour(row) &&
-      (allowedServers === null || allowedServers.has(row.server_name?.trim())));
+    records = records.filter(row => withinHour(row) && canViewBoard(row));
     if (selected && !withinHour(selected)) closeMap();
     const visibleRecords = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)));
+    const region = $("radar-region"), previousBoard = region.value;
+    const routes = new Map(Object.entries(boardScopes ?? {}).map(([id, scope]) => [id, scope.title]));
+    for (const row of visibleRecords) {
+      if (row.route_id && !routes.has(row.route_id)) routes.set(row.route_id, row.route_title || row.route_id);
+    }
+    if (routes.size !== region.options.length - 1 ||
+        [...region.options].slice(1).some(option => routes.get(option.value) !== option.textContent)) {
+      region.replaceChildren(new Option("全部可查看看板", ""), ...[...routes].map(([id, name]) => new Option(name, id)));
+      if (routes.has(previousBoard)) region.value = previousBoard;
+    }
+    const boardRecords = region.value ? visibleRecords.filter(row => row.route_id === region.value) : visibleRecords;
     const groupBar = $("radar-groups");
-    const groupTitles = new Set(visibleRecords.flatMap(groupsFor));
-    if (allowedServers === null) {
+    const groupTitles = new Set(boardRecords.flatMap(groupsFor));
+    if (allowedServers === null && boardScopes === null && !region.value) {
       for (const items of clanSnapshots.values()) for (const group of items) groupTitles.add(group.title);
     }
     const groups = [...groupTitles].sort();
@@ -472,7 +494,7 @@ window.skynetRadar = (() => {
     for (const button of groupBar.children) button.setAttribute("aria-pressed", String(button.value === activeGroup));
     for (const [id, field, label] of radarFilters) {
       const select = $(id), previous = select.value;
-      const values = [...new Set(visibleRecords.map(row => row[field]).filter(Boolean))].sort();
+      const values = [...new Set(boardRecords.map(row => row[field]).filter(Boolean))].sort();
       if (values.length !== select.options.length - 1 ||
           values.some((value, index) => select.options[index+1]?.value !== value)) {
         select.replaceChildren(new Option(label, ""), ...values.map(value => new Option(value, value)));
@@ -480,20 +502,13 @@ window.skynetRadar = (() => {
       }
     }
     const search = $("radar-search").value.trim().toLocaleLowerCase();
-    const region = $("radar-region"), previous = region.value;
-    const routes = new Map(visibleRecords.map(row => [row.route_id, row.route_title]));
-    if (routes.size !== region.options.length - 1 ||
-        [...region.options].slice(1).some(option => routes.get(option.value) !== option.textContent)) {
-      region.replaceChildren(new Option("全部分區", ""), ...[...routes].map(([id, name]) => new Option(name, id)));
-      if (routes.has(previous)) region.value = previous;
-    }
     const kind = $("radar-kind").value;
     if (selected && hiddenMaps.has(mapNameKey(selected.map_name))) closeMap();
-    const matching = visibleRecords.filter(row =>
+    const matching = boardRecords.filter(row =>
       (mode === "map" ? /^[a-f0-9]{64}$/.test(row.map_asset || "") &&
       [row.map_px,row.map_py].every(Number.isFinite) :
       modeFor(row) === mode) &&
-      (!region.value || region.value === row.route_id) && (!kind || mode !== "map" || kind === modeFor(row)) &&
+      (!kind || mode !== "map" || kind === modeFor(row)) &&
       (!activeGroup || groupsFor(row).includes(activeGroup)) &&
       radarFilters.every(([id, field]) => !$(id).value || $(id).value === row[field]) &&
       (!search || [row.name, row.nickname].some(name => name?.toLocaleLowerCase().includes(search))));
@@ -599,13 +614,14 @@ window.skynetRadar = (() => {
       for (let attempt=0; attempt<2; ++attempt) {
         try {
           const access = await token(session,Boolean(attempt));
-          const membership = await api(session,"/rest/v1/skynet_radar_members?select=user_id,allowed_servers,allowed_modes&limit=1",null,access);
+          const membership = await api(session,"/rest/v1/skynet_radar_members?select=user_id,allowed_servers,allowed_modes,board_scopes&limit=1",null,access);
           if (active !== session || epoch !== requestEpoch) return;
           if (!Array.isArray(membership) || !membership.some(member => member.user_id === session.owner)) {
             records = [];
             after = null;
             allowedModes.clear();
             allowedServers = new Set();
+            boardScopes = null;
             clanSnapshots.clear();
             permissionKey = null;
             renderModes();
@@ -615,7 +631,7 @@ window.skynetRadar = (() => {
             return;
           }
           const member = membership.find(row => row.user_id === session.owner);
-          const nextKey = JSON.stringify([member.allowed_servers, member.allowed_modes]);
+          const nextKey = JSON.stringify([member.allowed_servers, member.allowed_modes, member.board_scopes]);
           if (permissionKey !== nextKey) {
             permissionKey = nextKey;
             records = [];
@@ -623,6 +639,7 @@ window.skynetRadar = (() => {
             closeMap();
             allowedModes = new Set(member.allowed_modes ?? modes.keys());
             allowedServers = member.allowed_servers === null ? null : new Set(member.allowed_servers ?? []);
+            boardScopes = member.board_scopes ?? null;
             renderModes();
           }
           query.set("order", after ? "created_at.asc,id.asc,user_id.asc" : "created_at.desc,id.desc,user_id.desc");
@@ -673,7 +690,7 @@ window.skynetRadar = (() => {
   }
 
   $("radar-refresh").addEventListener("click", refreshRadar);
-  $("radar-region").addEventListener("change", () => {closeMap(); render();});
+  $("radar-region").addEventListener("change", () => {activeGroup = ""; closeMap(); render();});
   $("radar-kind").addEventListener("change", () => {closeMap(); render();});
   for (const [id] of radarFilters) $(id).addEventListener("change", () => {closeMap(); render();});
   $("radar-search").addEventListener("input", render);
