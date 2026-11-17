@@ -469,11 +469,12 @@ window.skynetRadar = (() => {
     const boardRecords = region.value ? visibleRecords.filter(row => row.route_id === region.value) : visibleRecords;
     const groupBar = $("radar-groups");
     const groupTitles = new Set(boardRecords.flatMap(groupsFor));
+    const allBoards = allowedServers === null && boardScopes === null;
     for (const items of clanSnapshots.values()) {
       for (const group of items) {
-        if (group.board_id && routes.has(group.board_id) && (!region.value || region.value === group.board_id)) {
+        if (allBoards && !region.value) {
           groupTitles.add(group.title);
-        } else if (!group.board_id && allowedServers === null && boardScopes === null && !region.value) {
+        } else if (group.board_id && routes.has(group.board_id) && (!region.value || region.value === group.board_id)) {
           groupTitles.add(group.title);
         }
       }
