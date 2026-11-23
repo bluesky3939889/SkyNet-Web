@@ -453,12 +453,14 @@ window.skynetRadar = (() => {
   }
 
   function latestCharacterReports(rows) {
+    const normalize = value => (value ?? "").normalize("NFKC").trim().toLowerCase();
     const keyFor = row => {
       if (row.kind !== "report") return null;
-      const server = row.server_name?.trim().toLowerCase();
-      const name = row.name?.trim().toLowerCase();
-      if (!server || !name || !row.route_id) return null;
-      return JSON.stringify([row.route_id, row.route_id === "main" ? row.route_title?.trim() : "", server, name]);
+      const route = normalize(row.route_id);
+      const title = normalize(row.route_title);
+      const name = normalize(row.name);
+      if (!name || (!route && !title)) return null;
+      return JSON.stringify([route, !route || route === "main" ? title : "", normalize(row.server_name), name]);
     };
     const latest = new Map();
     for (const row of rows) {
