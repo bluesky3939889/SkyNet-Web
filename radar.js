@@ -452,10 +452,37 @@ window.skynetRadar = (() => {
       (row.route_id !== "main" || scope.title === row.route_title?.trim());
   }
 
+  function latestCharacterReports(rows) {
+    const keyFor = row => {
+      if (row.kind !== "report") return null;
+      const server = row.server_name?.trim().toLowerCase();
+      const name = row.name?.trim().toLowerCase();
+      if (!server || !name || !row.route_id) return null;
+      return JSON.stringify([row.route_id, row.route_id === "main" ? row.route_title?.trim() : "", server, name]);
+    };
+    const latest = new Map();
+    for (const row of rows) {
+      const key = keyFor(row);
+      if (key === null) continue;
+      const previous = latest.get(key);
+      const occurred = Date.parse(row.occurred_at);
+      const previousOccurred = Date.parse(previous?.occurred_at);
+      if (!previous || occurred > previousOccurred ||
+          (occurred === previousOccurred && Date.parse(row.created_at) > Date.parse(previous.created_at))) {
+        latest.set(key, row);
+      }
+    }
+    return rows.filter(row => {
+      const key = keyFor(row);
+      return key === null || latest.get(key) === row;
+    });
+  }
+
   function render() {
     records = records.filter(row => withinHour(row) && canViewBoard(row));
     if (selected && !withinHour(selected)) closeMap();
-    const visibleRecords = records.filter(row => !hiddenMaps.has(mapNameKey(row.map_name)));
+    const visibleRecords = latestCharacterReports(records)
+      .filter(row => !hiddenMaps.has(mapNameKey(row.map_name)));
     const region = $("radar-region"), previousBoard = region.value;
     const routes = new Map(Object.entries(boardScopes ?? {}).map(([id, scope]) => [id, scope.title]));
     for (const row of visibleRecords) {
